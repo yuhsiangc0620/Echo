@@ -130,7 +130,7 @@ export default function MobileAppPrototype() {
 
   return (
     <main className="min-h-screen bg-[#171412] text-[#171412]">
-      <section className="mx-auto flex min-h-screen w-full max-w-[480px] flex-col overflow-hidden bg-[#f6f1e7]">
+      <section className="mx-auto flex h-[100svh] min-h-[720px] w-full max-w-[480px] flex-col overflow-hidden bg-[#f6f1e7]">
         <header className="flex h-14 shrink-0 items-center justify-between border-b border-black/10 bg-[#fffaf0] px-4">
           <Link className="grid size-9 place-items-center rounded-md border border-black/10 bg-white/60" href="/">
             <ChevronLeft aria-hidden className="size-5" />
@@ -177,7 +177,7 @@ export default function MobileAppPrototype() {
             </button>
           </div>
 
-          <div className="min-h-0 flex-1 px-4">
+          <div className="min-h-[280px] flex-1 px-4">
             <WorkScreenshot tone={activeUser.screenshotTone} />
           </div>
 
