@@ -1,0 +1,677 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Echo Candy Overlay</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #171412;
+        --cream: #fff7e6;
+        --rose: #ef6f7f;
+        --amber: #f5b642;
+        --cyan: #65c7df;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body,
+      #overlay {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+        background: transparent;
+        font-family:
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        pointer-events: none;
+      }
+
+      .hint {
+        position: fixed;
+        right: 18px;
+        bottom: 18px;
+        padding: 10px 12px;
+        border: 1px solid rgba(23, 20, 18, 0.18);
+        border-radius: 8px;
+        background: rgba(255, 247, 230, 0.86);
+        color: var(--ink);
+        font-size: 12px;
+        font-weight: 750;
+        box-shadow: 0 18px 44px rgba(23, 20, 18, 0.18);
+        backdrop-filter: blur(12px);
+      }
+
+      .status-panel {
+        position: fixed;
+        left: 18px;
+        bottom: 18px;
+        width: min(360px, calc(100vw - 36px));
+        border: 1px solid rgba(23, 20, 18, 0.18);
+        border-radius: 8px;
+        background: rgba(255, 247, 230, 0.88);
+        padding: 12px;
+        color: var(--ink);
+        font-size: 12px;
+        box-shadow: 0 18px 44px rgba(23, 20, 18, 0.18);
+        backdrop-filter: blur(12px);
+      }
+
+      .status-panel strong {
+        display: block;
+        margin-bottom: 8px;
+        font-size: 13px;
+      }
+
+      .status-grid {
+        display: grid;
+        gap: 7px;
+      }
+
+      .status-row {
+        display: grid;
+        grid-template-columns: 116px 1fr;
+        gap: 10px;
+        align-items: center;
+      }
+
+      .status-label {
+        color: #62594e;
+        font-weight: 750;
+      }
+
+      .bar {
+        height: 7px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: rgba(23, 20, 18, 0.12);
+      }
+
+      .bar > span {
+        display: block;
+        height: 100%;
+        width: var(--progress);
+        border-radius: inherit;
+        background: var(--rose);
+      }
+
+      .candy-card {
+        position: fixed;
+        top: 0;
+        left: var(--drop-x);
+        width: 184px;
+        pointer-events: auto;
+        animation: fall 1450ms cubic-bezier(0.15, 0.78, 0.28, 1) forwards;
+        filter: drop-shadow(0 18px 26px rgba(23, 20, 18, 0.3));
+      }
+
+      .candy {
+        position: relative;
+        display: grid;
+        width: 76px;
+        height: 76px;
+        margin: 0 auto 12px;
+        place-items: center;
+        border-radius: 46% 54% 50% 50%;
+        background:
+          radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.9) 0 8%, transparent 9%),
+          conic-gradient(from 18deg, var(--rose), var(--amber), var(--rose), var(--rose));
+      }
+
+      .candy::before {
+        content: "";
+        position: absolute;
+        inset: -14%;
+        z-index: -1;
+        background: repeating-conic-gradient(from 8deg, var(--rose) 0 10deg, transparent 10deg 22deg);
+        clip-path: polygon(
+          50% 0%,
+          58% 31%,
+          86% 13%,
+          69% 42%,
+          100% 50%,
+          69% 58%,
+          86% 87%,
+          58% 69%,
+          50% 100%,
+          42% 69%,
+          14% 87%,
+          31% 58%,
+          0% 50%,
+          31% 42%,
+          14% 13%,
+          42% 31%
+        );
+      }
+
+      .candy.sigh {
+        border-radius: 46% 54% 48% 52%;
+        background:
+          radial-gradient(circle at 35% 28%, rgba(255, 255, 255, 0.9) 0 12%, transparent 13%),
+          linear-gradient(145deg, #fff9f5, #bde9ef 62%, #8cc8d9);
+      }
+
+      .candy.sigh::before {
+        inset: auto auto 6px -10px;
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        background: #d9f5f6;
+        clip-path: none;
+      }
+
+      .candy.mouse {
+        border-radius: 999px;
+        background:
+          linear-gradient(90deg, transparent 0 16%, rgba(255, 255, 255, 0.62) 16% 28%, transparent 28% 44%, rgba(255, 255, 255, 0.46) 44% 56%, transparent 56% 100%),
+          linear-gradient(135deg, #79d8b7, #f6d46d);
+      }
+
+      .candy.mouse::before {
+        inset: auto;
+        left: -16px;
+        top: 25px;
+        width: 24px;
+        height: 34px;
+        border: 2px solid rgba(23, 20, 18, 0.2);
+        border-radius: 70% 30% 30% 70%;
+        background: #fff7e6;
+        clip-path: none;
+      }
+
+      .candy.speech {
+        border-radius: 54% 46% 58% 42%;
+        background:
+          radial-gradient(circle at 35% 28%, rgba(255, 255, 255, 0.88) 0 10%, transparent 11%),
+          linear-gradient(145deg, #f6d5ff, #d78be8 54%, #8f6fca);
+      }
+
+      .candy.music {
+        border-radius: 50%;
+        background:
+          repeating-conic-gradient(from 8deg, rgba(255, 255, 255, 0.72) 0 9deg, transparent 9deg 22deg),
+          conic-gradient(from 30deg, #f5b642, #ef6f7f, #65c7df, #f5b642);
+      }
+
+      .candy.air {
+        border-radius: 999px 42% 999px 42%;
+        background:
+          linear-gradient(135deg, rgba(255, 255, 255, 0.82), transparent 45%),
+          linear-gradient(145deg, #e6fbff, #8fd8e8 56%, #7cd7b8);
+      }
+
+      .candy.traffic {
+        border-radius: 18% 50% 18% 50%;
+        background:
+          linear-gradient(45deg, transparent 42%, rgba(245, 182, 66, 0.9) 42% 54%, transparent 54%),
+          linear-gradient(135deg, #44413b, #837d72);
+      }
+
+      .candy.door {
+        border-radius: 8px 18px 8px 18px;
+        background:
+          radial-gradient(circle at 72% 42%, #171412 0 6%, transparent 7%),
+          linear-gradient(145deg, #e8bd83, #c28f5a);
+      }
+
+      .band {
+        position: absolute;
+        inset: 38% -10%;
+        display: none;
+        border-top: 2px solid rgba(23, 20, 18, 0.38);
+        border-bottom: 2px solid rgba(23, 20, 18, 0.38);
+        background: rgba(255, 250, 240, 0.72);
+      }
+
+      .wrapped .band {
+        display: block;
+      }
+
+      .bubble {
+        border: 1px solid rgba(23, 20, 18, 0.18);
+        border-radius: 8px;
+        background: rgba(255, 247, 230, 0.92);
+        padding: 12px;
+        color: var(--ink);
+        text-align: center;
+        box-shadow: 0 20px 54px rgba(23, 20, 18, 0.22);
+        backdrop-filter: blur(18px);
+      }
+
+      .bubble strong {
+        display: block;
+        margin-bottom: 4px;
+        font-size: 15px;
+      }
+
+      .bubble span {
+        font-size: 12px;
+        font-weight: 650;
+        color: #62594e;
+      }
+
+      .actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        margin-top: 10px;
+      }
+
+      button {
+        min-height: 34px;
+        border: 1px solid rgba(23, 20, 18, 0.24);
+        border-radius: 6px;
+        background: #fffaf0;
+        color: var(--ink);
+        font-weight: 800;
+      }
+
+      button:last-child {
+        background: #ffd57a;
+      }
+
+      @keyframes fall {
+        0% {
+          opacity: 0;
+          transform: translate3d(0, -230px, 0) rotate(-18deg) scale(0.82);
+        }
+        70% {
+          opacity: 1;
+          transform: translate3d(0, min(58vh, 520px), 0) rotate(12deg) scale(1.03);
+        }
+        100% {
+          opacity: 1;
+          transform: translate3d(0, min(52vh, 480px), 0) rotate(0deg) scale(1);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="overlay">
+      <div class="status-panel" aria-live="polite">
+        <strong id="classifierStatus">MediaPipe Audio Classifier 載入中</strong>
+        <div class="status-grid">
+          <div class="status-row">
+            <span class="status-label">top label</span>
+            <span id="topLabel">等待麥克風</span>
+          </div>
+          <div class="status-row">
+            <span class="status-label">keyboard 40:00</span>
+            <div class="bar"><span id="keyboardBar" style="--progress: 0%"></span></div>
+          </div>
+          <div class="status-row">
+            <span class="status-label">mouse 10:00</span>
+            <div class="bar"><span id="mouseBar" style="--progress: 0%"></span></div>
+          </div>
+          <div class="status-row">
+            <span class="status-label">ambient</span>
+            <span id="ambientLabel">記錄周圍聲音</span>
+          </div>
+        </div>
+      </div>
+      <div class="hint">Echo: 工作聲音會掉糖；環境聲一起記錄；Silence 不掉糖</div>
+    </div>
+
+    <script type="module">
+      const overlay = document.querySelector("#overlay");
+      const classifierStatus = document.querySelector("#classifierStatus");
+      const topLabel = document.querySelector("#topLabel");
+      const keyboardBar = document.querySelector("#keyboardBar");
+      const mouseBar = document.querySelector("#mouseBar");
+      const ambientLabel = document.querySelector("#ambientLabel");
+
+      const RULES = {
+        Keyboard_heavy: {
+          thresholdSec: 2400,
+          minScore: 0.72,
+          labels: ["computer keyboard", "typing", "keyboard"],
+          drops: true,
+        },
+        Mouse_click: {
+          thresholdSec: 600,
+          minScore: 0.65,
+          labels: ["click", "mouse"],
+          drops: true,
+        },
+        Sigh: {
+          thresholdSec: 1.4,
+          minScore: 0.68,
+          labels: ["sigh"],
+          drops: true,
+        },
+        Speech: {
+          thresholdSec: 300,
+          minScore: 0.55,
+          labels: ["speech", "conversation", "narration"],
+          drops: false,
+        },
+        Music: {
+          thresholdSec: 300,
+          minScore: 0.55,
+          labels: ["music", "singing"],
+          drops: false,
+        },
+        Air_conditioner: {
+          thresholdSec: 600,
+          minScore: 0.5,
+          labels: ["air conditioning", "fan", "hum", "inside, small room"],
+          drops: false,
+        },
+        Traffic: {
+          thresholdSec: 300,
+          minScore: 0.55,
+          labels: ["traffic", "vehicle", "car", "bus", "motorcycle", "truck"],
+          drops: false,
+        },
+        Door_knock: {
+          thresholdSec: 20,
+          minScore: 0.55,
+          labels: ["knock", "door", "thump", "bang"],
+          drops: false,
+        },
+        Silence: {
+          thresholdSec: Number.POSITIVE_INFINITY,
+          minScore: 0.18,
+          labels: ["silence"],
+          drops: false,
+        },
+      };
+
+      const buffers = {
+        Keyboard_heavy: 0,
+        Mouse_click: 0,
+        Sigh: 0,
+        Speech: 0,
+        Music: 0,
+        Air_conditioner: 0,
+        Traffic: 0,
+        Door_knock: 0,
+        Silence: 0,
+      };
+
+      let lastDropAt = 0;
+
+      const labels = {
+        Keyboard_heavy: ["帶刺跳跳糖", "MediaPipe: Computer keyboard"],
+        Sigh: ["雲朵軟糖", "MediaPipe: Sigh"],
+        Mouse_click: ["薄荷夾心糖", "MediaPipe: Clicking / Mouse click"],
+        Speech: ["對話泡泡糖", "MediaPipe: Speech / Conversation"],
+        Music: ["旋律硬糖", "MediaPipe: Music"],
+        Air_conditioner: ["薄霜涼糖", "MediaPipe: Air conditioning / Fan"],
+        Traffic: ["柏油黑糖", "MediaPipe: Traffic / Vehicle"],
+        Door_knock: ["敲敲脆糖", "MediaPipe: Knock / Door"],
+      };
+
+      function setStatus(message) {
+        classifierStatus.textContent = message;
+      }
+
+      function formatSec(seconds) {
+        const safeSeconds = Math.max(0, Math.floor(seconds));
+        const minutes = Math.floor(safeSeconds / 60);
+        const rest = safeSeconds % 60;
+
+        return `${minutes.toString().padStart(2, "0")}:${rest.toString().padStart(2, "0")}`;
+      }
+
+      function renderBuffers() {
+        keyboardBar.style.setProperty(
+          "--progress",
+          `${Math.min(100, (buffers.Keyboard_heavy / RULES.Keyboard_heavy.thresholdSec) * 100)}%`,
+        );
+        mouseBar.style.setProperty(
+          "--progress",
+          `${Math.min(100, (buffers.Mouse_click / RULES.Mouse_click.thresholdSec) * 100)}%`,
+        );
+      }
+
+      function scoreFor(categories, rule) {
+        let best = null;
+
+        for (const category of categories) {
+          const name = String(category.categoryName || category.displayName || "").toLowerCase();
+          const score = Number(category.score || 0);
+
+          if (rule.labels.some((label) => name.includes(label)) && (!best || score > best.score)) {
+            best = {
+              name: category.categoryName || category.displayName || "unknown",
+              score,
+            };
+          }
+        }
+
+        return best;
+      }
+
+      function normalizeCategories(categories) {
+        const keyboard = scoreFor(categories, RULES.Keyboard_heavy);
+        const mouse = scoreFor(categories, RULES.Mouse_click);
+        const sigh = scoreFor(categories, RULES.Sigh);
+        const ambient = ["Door_knock", "Speech", "Music", "Air_conditioner", "Traffic"]
+          .map((audioClass) => ({ audioClass, ...scoreFor(categories, RULES[audioClass]) }))
+          .filter((sample) => sample.name && sample.score >= RULES[sample.audioClass].minScore)
+          .sort((a, b) => b.score - a.score)[0];
+        const silence = scoreFor(categories, RULES.Silence);
+
+        if (sigh && sigh.score >= RULES.Sigh.minScore) {
+          return { audioClass: "Sigh", ...sigh };
+        }
+
+        if (keyboard && keyboard.score >= RULES.Keyboard_heavy.minScore) {
+          return { audioClass: "Keyboard_heavy", ...keyboard };
+        }
+
+        if (mouse && mouse.score >= RULES.Mouse_click.minScore) {
+          return { audioClass: "Mouse_click", ...mouse };
+        }
+
+        if (ambient) {
+          return ambient;
+        }
+
+        if (silence || Math.max(...categories.map((category) => Number(category.score || 0)), 0) < RULES.Silence.minScore) {
+          return {
+            audioClass: "Silence",
+            name: silence?.name || "Silence / low confidence",
+            score: silence?.score || 0,
+          };
+        }
+
+        const top = categories[0];
+
+        return {
+          audioClass: "Other",
+          name: top?.categoryName || "unknown",
+          score: top?.score || 0,
+        };
+      }
+
+      function applyAggregation(sample, durationSec) {
+        topLabel.textContent = `${sample.name} ${Number(sample.score).toFixed(2)} -> ${sample.audioClass}`;
+
+        if (sample.audioClass === "Keyboard_heavy") {
+          buffers.Keyboard_heavy += durationSec;
+        } else {
+          buffers.Keyboard_heavy = Math.max(0, buffers.Keyboard_heavy - durationSec * 0.15);
+        }
+
+        if (sample.audioClass === "Mouse_click") {
+          buffers.Mouse_click += durationSec;
+        } else {
+          buffers.Mouse_click = Math.max(0, buffers.Mouse_click - durationSec * 0.25);
+        }
+
+        if (sample.audioClass === "Sigh") {
+          buffers.Sigh += durationSec;
+        } else {
+          buffers.Sigh = 0;
+        }
+
+        if (RULES[sample.audioClass] && !RULES[sample.audioClass].drops && sample.audioClass !== "Silence") {
+          buffers[sample.audioClass] += durationSec;
+          ambientLabel.textContent = `${labels[sample.audioClass]?.[0] || sample.audioClass} ${formatSec(buffers[sample.audioClass])}`;
+        }
+
+        if (sample.audioClass === "Silence") {
+          buffers.Silence += durationSec;
+          setStatus(`Silence 記錄中，不掉糖：${formatSec(buffers.Silence)}`);
+        } else {
+          buffers.Silence = 0;
+          setStatus("MediaPipe Audio Classifier 正在本地推論");
+        }
+
+        maybeDropFromAggregator("Keyboard_heavy");
+        maybeDropFromAggregator("Mouse_click");
+        maybeDropFromAggregator("Sigh");
+        renderBuffers();
+      }
+
+      function maybeDropFromAggregator(audioClass) {
+        const rule = RULES[audioClass];
+        const now = performance.now();
+
+        if (!rule?.drops || buffers[audioClass] < rule.thresholdSec || now - lastDropAt < 2500) {
+          return;
+        }
+
+        lastDropAt = now;
+        dropCandy({
+          audioClass,
+          wrapped: false,
+          source: "MediaPipe local aggregator",
+          durationSec: buffers[audioClass],
+        });
+        buffers[audioClass] = 0;
+      }
+
+      function dropCandy(payload = {}) {
+        const audioClass = payload.audioClass || "Keyboard_heavy";
+        const [name, source] = labels[audioClass] || labels.Keyboard_heavy;
+        const card = document.createElement("section");
+        const maxLeft = Math.max(24, window.innerWidth - 224);
+        const x = 24 + Math.random() * (maxLeft - 24);
+        const candyClass = {
+          Sigh: "sigh",
+          Mouse_click: "mouse",
+          Speech: "speech",
+          Music: "music",
+          Air_conditioner: "air",
+          Traffic: "traffic",
+          Door_knock: "door",
+        }[audioClass] || "";
+
+        card.className = "candy-card";
+        card.style.setProperty("--drop-x", `${x}px`);
+        card.innerHTML = `
+          <div class="candy ${candyClass} ${payload.wrapped ? "wrapped" : ""}">
+            <span class="band"></span>
+          </div>
+          <div class="bubble">
+            <strong>${name}</strong>
+            <span>${payload.source || source}${payload.durationSec ? ` · ${formatSec(payload.durationSec)}` : ""}</span>
+            <div class="actions">
+              <button type="button">收進罐子</button>
+              <button type="button">包裝</button>
+            </div>
+          </div>
+        `;
+
+        card.addEventListener("mouseenter", () => window.echoOverlay.setInteractive(true));
+        card.addEventListener("mouseleave", () => window.echoOverlay.setInteractive(false));
+        card.querySelectorAll("button").forEach((button) => {
+          button.addEventListener("click", () => {
+            card.remove();
+            window.echoOverlay.setInteractive(false);
+          });
+        });
+
+        overlay.append(card);
+        window.setTimeout(() => card.remove(), 9000);
+      }
+
+      async function startMediaPipeAudioClassifier() {
+        try {
+          setStatus("載入 MediaPipe Audio Classifier");
+          const mediaPipe = await import("../node_modules/@mediapipe/tasks-audio/audio_bundle.mjs").catch(() =>
+            import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-audio@0.10.35/audio_bundle.mjs"),
+          );
+          const audio = await mediaPipe.FilesetResolver.forAudioTasks(
+            "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-audio@0.10.35/wasm",
+          );
+          const classifier = await mediaPipe.AudioClassifier.createFromOptions(audio, {
+            baseOptions: {
+              modelAssetPath: "https://tfhub.dev/google/lite-model/yamnet/classification/tflite/1?lite-format=tflite",
+            },
+            maxResults: 8,
+          });
+          const stream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              autoGainControl: false,
+              echoCancellation: false,
+              noiseSuppression: false,
+            },
+            video: false,
+          });
+          const audioContext = new AudioContext({ sampleRate: 16000 });
+          const source = audioContext.createMediaStreamSource(stream);
+          const scriptNode = audioContext.createScriptProcessor(16384, 1, 1);
+          const silentGain = audioContext.createGain();
+
+          silentGain.gain.value = 0;
+          source.connect(scriptNode);
+          scriptNode.connect(silentGain);
+          silentGain.connect(audioContext.destination);
+
+          scriptNode.onaudioprocess = (audioProcessingEvent) => {
+            const inputData = audioProcessingEvent.inputBuffer.getChannelData(0);
+            const result = classifier.classify(inputData);
+            const categories = result?.[0]?.classifications?.[0]?.categories || [];
+
+            if (!categories.length) {
+              return;
+            }
+
+            applyAggregation(normalizeCategories(categories), inputData.length / audioContext.sampleRate);
+          };
+
+          setStatus("MediaPipe Audio Classifier 正在本地推論");
+        } catch (error) {
+          setStatus("MediaPipe 未啟動；請確認麥克風權限與網路");
+          topLabel.textContent = error instanceof Error ? error.message : "classifier unavailable";
+        }
+      }
+
+      window.echoOverlay.onDrop(dropCandy);
+      window.echoOverlay.onFastForward((payload = {}) => {
+        const audioClass = payload.audioClass || "Keyboard_heavy";
+
+        buffers[audioClass] = RULES[audioClass].thresholdSec;
+        applyAggregation(
+          {
+            audioClass,
+            name: `debug ${audioClass}`,
+            score: 1,
+          },
+          0,
+        );
+      });
+      window.addEventListener("keydown", (event) => {
+        if (event.key.toLowerCase() === "e") {
+          dropCandy();
+        }
+      });
+
+      renderBuffers();
+      startMediaPipeAudioClassifier();
+    </script>
+  </body>
+</html>
