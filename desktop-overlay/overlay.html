@@ -410,6 +410,7 @@
         Traffic: ["柏油黑糖", "MediaPipe: Traffic / Vehicle"],
         Door_knock: ["敲敲脆糖", "MediaPipe: Knock / Door"],
       };
+      const apiBaseUrl = window.echoOverlay.apiBaseUrl;
 
       function setStatus(message) {
         classifierStatus.textContent = message;
@@ -588,7 +589,17 @@
         card.addEventListener("mouseenter", () => window.echoOverlay.setInteractive(true));
         card.addEventListener("mouseleave", () => window.echoOverlay.setInteractive(false));
         card.querySelectorAll("button").forEach((button) => {
-          button.addEventListener("click", () => {
+          button.addEventListener("click", async () => {
+            const status = button.textContent.includes("包裝") ? "Wrapped" : "Raw";
+
+            button.disabled = true;
+            button.textContent = "上傳中";
+            await uploadCandy({
+              ...payload,
+              audioClass,
+              status,
+              mediapipeCategory: source,
+            });
             card.remove();
             window.echoOverlay.setInteractive(false);
           });
@@ -596,6 +607,38 @@
 
         overlay.append(card);
         window.setTimeout(() => card.remove(), 9000);
+      }
+
+      async function uploadCandy(payload) {
+        try {
+          const response = await fetch(`${apiBaseUrl}/api/candy`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              id: `desktop-${Date.now()}`,
+              userId: window.echoOverlay.userId,
+              deviceId: window.echoOverlay.deviceId,
+              audioClass: payload.audioClass || "Keyboard_heavy",
+              mediapipeCategory: payload.mediapipeCategory,
+              mediapipeScore: payload.mediapipeScore ?? null,
+              durationSec: Math.round(payload.durationSec || 0),
+              status: payload.status || "Raw",
+              localCreatedAt: new Date().toISOString(),
+            }),
+          });
+          const result = await response.json().catch(() => ({}));
+
+          if (!response.ok || !result.ok) {
+            setStatus(`Notion 上傳失敗：${result?.error?.message || response.status}`);
+            return;
+          }
+
+          setStatus(`已寫入 ${result.destination}`);
+        } catch (error) {
+          setStatus(`上傳失敗：${error instanceof Error ? error.message : "network unavailable"}`);
+        }
       }
 
       async function startMediaPipeAudioClassifier() {

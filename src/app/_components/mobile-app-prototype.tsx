@@ -65,32 +65,35 @@ function WorkScreenshot({ tone }: { tone: JarUser["screenshotTone"] }) {
 function JarPreview({ user, active, onSelect }: { user: JarUser; active: boolean; onSelect: () => void }) {
   return (
     <button
-      className="grid min-w-[86px] snap-center justify-items-center gap-2 text-center"
+      className="grid min-w-[118px] snap-center justify-items-center gap-2 text-center"
       type="button"
       onClick={onSelect}
       aria-pressed={active}
     >
       <span
-        className={`relative grid size-[74px] place-items-center rounded-full border transition ${
+        className={`relative h-[74px] w-[106px] overflow-hidden rounded-b-[30px] rounded-t-lg border transition ${
           active ? "border-black bg-[#fffaf0] shadow-[0_12px_26px_rgba(23,20,18,.16)]" : "border-black/10 bg-white/58"
         }`}
       >
         <span
-          className="absolute -right-0.5 top-1 size-3 rounded-full border-2 border-[#fbf4e6]"
+          className="absolute right-2 top-2 z-20 size-3 rounded-full border-2 border-[#fbf4e6]"
           style={{ background: user.online ? "#2da66f" : "#9f988e" }}
         />
-        <span className="relative h-[48px] w-[42px] overflow-hidden rounded-b-2xl rounded-t-md border border-black/14 bg-[#e9fbff]/70">
+        <span className="absolute inset-x-2 bottom-2 top-3 rounded-b-[24px] rounded-t-md border border-black/14 bg-[#e9fbff]/72" />
+        <span className="absolute inset-x-3 top-3 h-5 rounded-[50%] border border-black/10 bg-white/45" />
+        <span className="absolute inset-x-4 bottom-3 h-5 rounded-[50%] bg-black/5" />
+        <span className="absolute inset-0">
           {user.jar.slice(0, 4).map((audioClass, index) => (
             <span
               key={`${user.id}-${audioClass}-${index}`}
               className="absolute"
               style={{
-                left: `${9 + ((index * 19) % 45)}%`,
-                bottom: `${3 + (index % 2) * 14}px`,
+                left: `${16 + ((index * 20) % 55)}%`,
+                bottom: `${10 + (index % 2) * 18}px`,
                 transform: `rotate(${index * 9 - 12}deg)`,
               }}
             >
-              <CandyShape audioClass={audioClass} size={20} wrapped={index === 0} />
+              <CandyShape audioClass={audioClass} size={24} wrapped={index === 0} />
             </span>
           ))}
         </span>
