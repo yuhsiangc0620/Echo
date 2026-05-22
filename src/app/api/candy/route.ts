@@ -1,9 +1,17 @@
 import { AUDIO_CLASSES, AUDIO_CONFIG } from "@/lib/candy/catalog";
 
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+};
+
 type CandyPayload = {
   id?: string;
   userId?: string;
   deviceId?: string;
+  primaryAudioClass?: string;
+  audioClasses?: string[];
   audioClass?: string;
   mediapipeCategory?: string;
   mediapipeScore?: number;
@@ -12,6 +20,16 @@ type CandyPayload = {
   screenshotFile?: string;
   localCreatedAt?: string;
 };
+
+function jsonResponse(body: unknown, init?: ResponseInit) {
+  return Response.json(body, {
+    ...init,
+    headers: {
+      ...CORS_HEADERS,
+      ...init?.headers,
+    },
+  });
+}
 
 function textProperty(content: string) {
   return {
@@ -65,8 +83,9 @@ async function createNotionCandyPage(payload: CandyPayload, candyId: string, sta
 
   const now = new Date();
   const jarExpiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
-  const audioClass = payload.audioClass ?? "Keyboard_heavy";
-  const config = AUDIO_CONFIG[audioClass as keyof typeof AUDIO_CONFIG];
+  const primaryAudioClass = payload.primaryAudioClass ?? payload.audioClass ?? "Keyboard_heavy";
+  const audioClasses = Array.from(new Set([primaryAudioClass, ...(payload.audioClasses ?? [])])).filter(Boolean);
+  const config = AUDIO_CONFIG[primaryAudioClass as keyof typeof AUDIO_CONFIG];
   const screenshotUrl =
     status === "Wrapped" && payload.screenshotFile?.startsWith("https://")
       ? payload.screenshotFile
@@ -76,10 +95,13 @@ async function createNotionCandyPage(payload: CandyPayload, candyId: string, sta
     Candy_ID: titleProperty(candyId),
     User_ID: textProperty(payload.userId ?? "desktop-demo-user"),
     Device_ID: textProperty(payload.deviceId ?? "desktop-overlay"),
-    Audio_Class: {
+    Primary_Audio_Class: {
       select: {
-        name: audioClass,
+        name: primaryAudioClass,
       },
+    },
+    Audio_Classes: {
+      multi_select: audioClasses.map((audioClass) => ({ name: audioClass })),
     },
     Duration_Sec: {
       number: payload.durationSec ?? 0,
@@ -89,7 +111,7 @@ async function createNotionCandyPage(payload: CandyPayload, candyId: string, sta
         name: status,
       },
     },
-    MediaPipe_Category: textProperty(payload.mediapipeCategory ?? config?.mediapipeCategory ?? audioClass),
+    MediaPipe_Category: textProperty(payload.mediapipeCategory ?? config?.mediapipeCategory ?? primaryAudioClass),
     Local_Created_At: dateProperty(payload.localCreatedAt ?? now.toISOString()),
     Jar_Expires_At: dateProperty(jarExpiresAt),
     Show_In_Jar: {
@@ -155,7 +177,7 @@ export async function POST(request: Request) {
   const notionResult = await createNotionCandyPage(payload, candyId, status);
 
   if (notionResult && !notionResult.ok) {
-    return Response.json(
+    return jsonResponse(
       {
         ok: false,
         destination: "notion.master_database",
@@ -165,7 +187,7 @@ export async function POST(request: Request) {
     );
   }
 
-  return Response.json(
+  return jsonResponse(
     {
       ok: true,
       destination: notionResult ? "notion.master_database" : "mock.notion.master_database",
@@ -174,7 +196,10 @@ export async function POST(request: Request) {
         Candy_ID: candyId,
         User_ID: payload.userId ?? "desktop-demo-user",
         Device_ID: payload.deviceId ?? "desktop-overlay",
-        Audio_Class: payload.audioClass ?? "Keyboard_heavy",
+        Primary_Audio_Class: payload.primaryAudioClass ?? payload.audioClass ?? "Keyboard_heavy",
+        Audio_Classes: Array.from(
+          new Set([payload.primaryAudioClass ?? payload.audioClass ?? "Keyboard_heavy", ...(payload.audioClasses ?? [])]),
+        ),
         MediaPipe_Category: payload.mediapipeCategory ?? null,
         MediaPipe_Score: payload.mediapipeScore ?? null,
         Duration_Sec: payload.durationSec ?? 0,
@@ -218,7 +243,7 @@ export async function GET() {
     }),
   );
 
-  return Response.json({
+  return jsonResponse({
     classifier: {
       engine: "MediaPipe Audio Classifier",
       runtime: "desktop edge process",
@@ -226,5 +251,12 @@ export async function GET() {
       output: "categoryName + score per inference window",
     },
     standards,
+  });
+}
+
+export function OPTIONS() {
+  return new Response(null, {
+    status: 204,
+    headers: CORS_HEADERS,
   });
 }

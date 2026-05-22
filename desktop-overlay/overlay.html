@@ -547,11 +547,26 @@
         lastDropAt = now;
         dropCandy({
           audioClass,
+          audioClasses: collectAudioClasses(audioClass),
           wrapped: false,
           source: "MediaPipe local aggregator",
           durationSec: buffers[audioClass],
         });
         buffers[audioClass] = 0;
+      }
+
+      function collectAudioClasses(primaryAudioClass) {
+        return Object.keys(buffers).filter((audioClass) => {
+          if (audioClass === primaryAudioClass) {
+            return true;
+          }
+
+          if (audioClass === "Silence") {
+            return false;
+          }
+
+          return buffers[audioClass] > 0;
+        });
       }
 
       function dropCandy(payload = {}) {
@@ -620,7 +635,8 @@
               id: `desktop-${Date.now()}`,
               userId: window.echoOverlay.userId,
               deviceId: window.echoOverlay.deviceId,
-              audioClass: payload.audioClass || "Keyboard_heavy",
+              primaryAudioClass: payload.audioClass || "Keyboard_heavy",
+              audioClasses: payload.audioClasses || collectAudioClasses(payload.audioClass || "Keyboard_heavy"),
               mediapipeCategory: payload.mediapipeCategory,
               mediapipeScore: payload.mediapipeScore ?? null,
               durationSec: Math.round(payload.durationSec || 0),

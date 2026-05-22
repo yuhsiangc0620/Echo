@@ -436,6 +436,11 @@ export default function EchoPrototype() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...record,
+          primaryAudioClass: record.audioClass,
+          audioClasses: [
+            record.audioClass,
+            ...AUDIO_CLASSES.filter((audioClass) => audioClass !== record.audioClass && buffer[audioClass] > 0),
+          ],
           mediapipeCategory: AUDIO_CONFIG[record.audioClass].mediapipeCategory,
           mediapipeScore: Number(AUDIO_CONFIG[record.audioClass].confidence),
         }),
