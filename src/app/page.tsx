@@ -1,5 +1,5 @@
-import EchoPrototype from "@/app/_components/echo-prototype";
+import MobileAppPrototype from "@/app/_components/mobile-app-prototype";
 
 export default function Home() {
-  return <EchoPrototype />;
+  return <MobileAppPrototype />;
 }
