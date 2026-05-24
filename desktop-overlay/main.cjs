@@ -1,8 +1,14 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 const path = require("node:path");
-const { app, BrowserWindow, globalShortcut, ipcMain, screen } = require("electron");
+const { app, BrowserWindow, desktopCapturer, globalShortcut, ipcMain, screen } = require("electron");
 
 let overlayWindow;
+
+function wait(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
 
 app.whenReady().then(() => {
   const { session } = require("electron");
@@ -86,7 +92,49 @@ app.whenReady().then(() => {
 });
 
 ipcMain.on("echo:interactive", (_event, enabled) => {
+  overlayWindow?.setFocusable(Boolean(enabled));
   overlayWindow?.setIgnoreMouseEvents(!enabled, { forward: true });
+});
+
+ipcMain.on("echo:focus", () => {
+  overlayWindow?.setFocusable(true);
+  overlayWindow?.setIgnoreMouseEvents(false, { forward: true });
+  overlayWindow?.show();
+  overlayWindow?.focus();
+});
+
+ipcMain.handle("echo:capture-screen", async () => {
+  const primaryDisplay = screen.getPrimaryDisplay();
+  const scaleFactor = primaryDisplay.scaleFactor || 1;
+  const width = Math.round(primaryDisplay.bounds.width * scaleFactor);
+  const height = Math.round(primaryDisplay.bounds.height * scaleFactor);
+
+  overlayWindow?.hide();
+  await wait(140);
+
+  try {
+    const sources = await desktopCapturer.getSources({
+      types: ["screen"],
+      thumbnailSize: { width, height },
+    });
+    const displayId = String(primaryDisplay.id);
+    const source = sources.find((candidate) => candidate.display_id === displayId) || sources[0];
+
+    if (!source) {
+      throw new Error("No screen source available");
+    }
+
+    const size = source.thumbnail.getSize();
+
+    return {
+      dataUrl: source.thumbnail.toDataURL(),
+      width: size.width,
+      height: size.height,
+    };
+  } finally {
+    overlayWindow?.showInactive();
+    overlayWindow?.setAlwaysOnTop(true, "screen-saver");
+  }
 });
 
 app.on("window-all-closed", () => {

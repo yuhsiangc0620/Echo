@@ -104,6 +104,86 @@
         background: var(--rose);
       }
 
+      .profile-panel {
+        position: fixed;
+        inset: 0;
+        z-index: 1000;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        background: rgba(23, 20, 18, 0.62);
+        backdrop-filter: blur(10px);
+        pointer-events: auto;
+      }
+
+      .profile-panel[hidden] {
+        display: none;
+      }
+
+      .profile-card {
+        width: min(360px, calc(100vw - 48px));
+        border: 1px solid rgba(23, 20, 18, 0.16);
+        border-radius: 8px;
+        background: #fffaf0;
+        padding: 20px;
+        color: var(--ink);
+        box-shadow: 0 28px 90px rgba(0, 0, 0, 0.35);
+      }
+
+      .profile-card small {
+        display: block;
+        color: #62594e;
+        font-size: 11px;
+        font-weight: 850;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .profile-card h1 {
+        margin: 8px 0 0;
+        font-size: 24px;
+        line-height: 1.15;
+      }
+
+      .profile-card p {
+        margin: 10px 0 0;
+        color: #62594e;
+        font-size: 14px;
+        font-weight: 700;
+        line-height: 1.7;
+      }
+
+      .profile-card input {
+        width: 100%;
+        height: 48px;
+        margin-top: 18px;
+        border: 1px solid rgba(23, 20, 18, 0.16);
+        border-radius: 6px;
+        background: white;
+        padding: 0 12px;
+        color: var(--ink);
+        font-size: 16px;
+        font-weight: 850;
+        outline: none;
+      }
+
+      .profile-card input:focus {
+        border-color: rgba(23, 20, 18, 0.62);
+      }
+
+      .profile-preview {
+        overflow: hidden;
+        margin-top: 10px;
+        border-radius: 6px;
+        background: #f6f1e7;
+        padding: 9px 10px;
+        color: #62594e;
+        font-size: 12px;
+        font-weight: 750;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
       .candy-card {
         position: fixed;
         top: 0;
@@ -279,6 +359,74 @@
         background: #ffd57a;
       }
 
+      .profile-card button {
+        width: 100%;
+        height: 48px;
+        margin-top: 16px;
+        border: 0;
+        background: var(--ink);
+        color: var(--cream);
+      }
+
+      .mask-panel {
+        position: fixed;
+        inset: 0;
+        z-index: 900;
+        display: grid;
+        grid-template-rows: auto 1fr;
+        gap: 14px;
+        padding: 18px;
+        background: rgba(12, 11, 10, 0.88);
+        color: #fffaf0;
+        pointer-events: auto;
+      }
+
+      .mask-panel[hidden] {
+        display: none;
+      }
+
+      .mask-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .mask-toolbar strong {
+        font-size: 15px;
+      }
+
+      .mask-tools {
+        display: flex;
+        gap: 8px;
+      }
+
+      .mask-tools button {
+        background: #fffaf0;
+      }
+
+      .mask-tools button:last-child {
+        background: #ffd57a;
+      }
+
+      .mask-stage {
+        display: grid;
+        min-height: 0;
+        place-items: center;
+      }
+
+      #maskCanvas {
+        max-width: 100%;
+        max-height: 100%;
+        border: 1px solid rgba(255, 250, 240, 0.18);
+        border-radius: 8px;
+        background: #171412;
+        box-shadow: 0 28px 100px rgba(0, 0, 0, 0.48);
+        cursor: crosshair;
+        touch-action: none;
+      }
+
       @keyframes fall {
         0% {
           opacity: 0;
@@ -316,9 +464,36 @@
             <span class="status-label">ambient</span>
             <span id="ambientLabel">記錄周圍聲音</span>
           </div>
+          <div class="status-row">
+            <span class="status-label">user</span>
+            <span id="profileLabel">尚未設定</span>
+          </div>
         </div>
       </div>
       <div class="hint">Echo: 工作聲音會掉糖；環境聲一起記錄；Silence 不掉糖</div>
+      <div id="profilePanel" class="profile-panel" hidden>
+        <form id="profileForm" class="profile-card">
+          <small>Echo onboarding</small>
+          <h1>你的糖果罐名稱</h1>
+          <p>桌面端和手機端輸入同一個名稱，就會使用同一個 User_ID 寫入 Echo 的 Notion database。</p>
+          <input id="profileNameInput" placeholder="例如 Yuhsiang" autocomplete="name" />
+          <div id="profilePreview" class="profile-preview">User_ID: user_echo</div>
+          <button type="submit">開始同步</button>
+        </form>
+      </div>
+      <div id="maskPanel" class="mask-panel" hidden>
+        <div class="mask-toolbar">
+          <strong>塗黑需要遮蔽的內容</strong>
+          <div class="mask-tools">
+            <button id="maskClearButton" type="button">清除遮蔽</button>
+            <button id="maskCancelButton" type="button">取消</button>
+            <button id="maskConfirmButton" type="button">送出包裝</button>
+          </div>
+        </div>
+        <div class="mask-stage">
+          <canvas id="maskCanvas"></canvas>
+        </div>
+      </div>
     </div>
 
     <script type="module">
@@ -328,6 +503,18 @@
       const keyboardBar = document.querySelector("#keyboardBar");
       const mouseBar = document.querySelector("#mouseBar");
       const ambientLabel = document.querySelector("#ambientLabel");
+      const profileLabel = document.querySelector("#profileLabel");
+      const profilePanel = document.querySelector("#profilePanel");
+      const profileForm = document.querySelector("#profileForm");
+      const profileNameInput = document.querySelector("#profileNameInput");
+      const profilePreview = document.querySelector("#profilePreview");
+      const maskPanel = document.querySelector("#maskPanel");
+      const maskCanvas = document.querySelector("#maskCanvas");
+      const maskClearButton = document.querySelector("#maskClearButton");
+      const maskCancelButton = document.querySelector("#maskCancelButton");
+      const maskConfirmButton = document.querySelector("#maskConfirmButton");
+
+      const PROFILE_STORAGE_KEY = "echo.profile.v1";
 
       const RULES = {
         Keyboard_heavy: {
@@ -399,6 +586,10 @@
       };
 
       let lastDropAt = 0;
+      let maskImage = null;
+      let maskResolve = null;
+      let maskDrawing = false;
+      let maskLastPoint = null;
 
       const labels = {
         Keyboard_heavy: ["帶刺跳跳糖", "MediaPipe: Computer keyboard"],
@@ -411,6 +602,69 @@
         Door_knock: ["敲敲脆糖", "MediaPipe: Knock / Door"],
       };
       const apiBaseUrl = window.echoOverlay.apiBaseUrl;
+
+      function userIdFromName(name) {
+        const normalized = name
+          .trim()
+          .toLowerCase()
+          .replace(/[^a-z0-9\u4e00-\u9fff]+/g, "-")
+          .replace(/^-+|-+$/g, "");
+
+        return `user_${normalized || "echo"}`;
+      }
+
+      function readStoredProfile() {
+        try {
+          const raw = window.localStorage.getItem(PROFILE_STORAGE_KEY);
+
+          if (!raw) {
+            return null;
+          }
+
+          return JSON.parse(raw);
+        } catch {
+          return null;
+        }
+      }
+
+      function writeStoredProfile(profile) {
+        window.localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profile));
+      }
+
+      function currentProfile() {
+        const stored = readStoredProfile();
+
+        if (stored?.userId) {
+          return stored;
+        }
+
+        return {
+          name: "Echo",
+          userId: window.echoOverlay.userId || "desktop-demo-user",
+        };
+      }
+
+      function updateProfileLabel() {
+        const profile = currentProfile();
+
+        profileLabel.textContent = `${profile.name} · ${profile.userId}`;
+      }
+
+      function updateProfilePreview() {
+        profilePreview.textContent = `User_ID: ${userIdFromName(profileNameInput.value)}`;
+      }
+
+      function showProfilePanel() {
+        profilePanel.hidden = false;
+        window.echoOverlay.setInteractive(true);
+        window.echoOverlay.focus();
+        window.setTimeout(() => profileNameInput.focus(), 50);
+      }
+
+      function hideProfilePanel() {
+        profilePanel.hidden = true;
+        window.echoOverlay.setInteractive(false);
+      }
 
       function setStatus(message) {
         classifierStatus.textContent = message;
@@ -433,6 +687,121 @@
           "--progress",
           `${Math.min(100, (buffers.Mouse_click / RULES.Mouse_click.thresholdSec) * 100)}%`,
         );
+      }
+
+      function canvasPoint(event) {
+        const rect = maskCanvas.getBoundingClientRect();
+
+        return {
+          x: ((event.clientX - rect.left) / rect.width) * maskCanvas.width,
+          y: ((event.clientY - rect.top) / rect.height) * maskCanvas.height,
+        };
+      }
+
+      function drawMaskLine(from, to) {
+        const context = maskCanvas.getContext("2d");
+
+        context.save();
+        context.strokeStyle = "#050505";
+        context.lineWidth = Math.max(28, maskCanvas.width * 0.026);
+        context.lineCap = "round";
+        context.lineJoin = "round";
+        context.beginPath();
+        context.moveTo(from.x, from.y);
+        context.lineTo(to.x, to.y);
+        context.stroke();
+        context.restore();
+      }
+
+      function drawMaskImage() {
+        if (!maskImage) {
+          return;
+        }
+
+        const maxWidth = Math.max(320, window.innerWidth - 36);
+        const maxHeight = Math.max(240, window.innerHeight - 98);
+        const ratio = Math.min(maxWidth / maskImage.naturalWidth, maxHeight / maskImage.naturalHeight, 1);
+        const cssWidth = Math.round(maskImage.naturalWidth * ratio);
+        const cssHeight = Math.round(maskImage.naturalHeight * ratio);
+        const dpr = window.devicePixelRatio || 1;
+        const context = maskCanvas.getContext("2d");
+
+        maskCanvas.style.width = `${cssWidth}px`;
+        maskCanvas.style.height = `${cssHeight}px`;
+        maskCanvas.width = Math.round(cssWidth * dpr);
+        maskCanvas.height = Math.round(cssHeight * dpr);
+        context.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
+        context.drawImage(maskImage, 0, 0, maskCanvas.width, maskCanvas.height);
+      }
+
+      function closeMaskEditor(result) {
+        maskPanel.hidden = true;
+        window.echoOverlay.setInteractive(false);
+
+        if (maskResolve) {
+          maskResolve(result);
+        }
+
+        maskImage = null;
+        maskResolve = null;
+        maskDrawing = false;
+        maskLastPoint = null;
+      }
+
+      function openMaskEditor(dataUrl) {
+        return new Promise((resolve) => {
+          maskResolve = resolve;
+          maskImage = new Image();
+          maskImage.onload = () => {
+            drawMaskImage();
+            maskPanel.hidden = false;
+            window.echoOverlay.setInteractive(true);
+            window.echoOverlay.focus();
+          };
+          maskImage.onerror = () => {
+            closeMaskEditor(null);
+          };
+          maskImage.src = dataUrl;
+        });
+      }
+
+      async function wrapCandyWithScreenshot(payload, audioClass, source, card, button) {
+        try {
+          button.disabled = true;
+          button.textContent = "截圖中";
+          window.echoOverlay.setInteractive(true);
+
+          const capture = await window.echoOverlay.captureScreen();
+
+          button.textContent = "遮蔽中";
+          const masked = await openMaskEditor(capture.dataUrl);
+
+          if (!masked) {
+            button.disabled = false;
+            button.textContent = "包裝";
+            window.echoOverlay.setInteractive(false);
+            return;
+          }
+
+          button.textContent = "上傳中";
+          await uploadCandy({
+            ...payload,
+            audioClass,
+            status: "Wrapped",
+            mediapipeCategory: source,
+            screenshotDataUrl: masked.screenshotDataUrl,
+            screenshotWidth: masked.screenshotWidth,
+            screenshotHeight: masked.screenshotHeight,
+            screenshotMasked: true,
+          });
+          card.remove();
+        } catch (error) {
+          setStatus(`包裝失敗：${error instanceof Error ? error.message : "capture unavailable"}`);
+          button.disabled = false;
+          button.textContent = "包裝";
+        } finally {
+          window.echoOverlay.setInteractive(false);
+        }
       }
 
       function scoreFor(categories, rule) {
@@ -607,6 +976,11 @@
           button.addEventListener("click", async () => {
             const status = button.textContent.includes("包裝") ? "Wrapped" : "Raw";
 
+            if (status === "Wrapped") {
+              await wrapCandyWithScreenshot(payload, audioClass, source, card, button);
+              return;
+            }
+
             button.disabled = true;
             button.textContent = "上傳中";
             await uploadCandy({
@@ -626,6 +1000,7 @@
 
       async function uploadCandy(payload) {
         try {
+          const profile = currentProfile();
           const response = await fetch(`${apiBaseUrl}/api/candy`, {
             method: "POST",
             headers: {
@@ -633,7 +1008,7 @@
             },
             body: JSON.stringify({
               id: `desktop-${Date.now()}`,
-              userId: window.echoOverlay.userId,
+              userId: profile.userId,
               deviceId: window.echoOverlay.deviceId,
               primaryAudioClass: payload.audioClass || "Keyboard_heavy",
               audioClasses: payload.audioClasses || collectAudioClasses(payload.audioClass || "Keyboard_heavy"),
@@ -641,6 +1016,10 @@
               mediapipeScore: payload.mediapipeScore ?? null,
               durationSec: Math.round(payload.durationSec || 0),
               status: payload.status || "Raw",
+              screenshotDataUrl: payload.screenshotDataUrl,
+              screenshotWidth: payload.screenshotWidth,
+              screenshotHeight: payload.screenshotHeight,
+              screenshotMasked: payload.screenshotMasked,
               localCreatedAt: new Date().toISOString(),
             }),
           });
@@ -709,7 +1088,62 @@
         }
       }
 
+      maskCanvas.addEventListener("pointerdown", (event) => {
+        maskDrawing = true;
+        maskLastPoint = canvasPoint(event);
+        drawMaskLine(maskLastPoint, maskLastPoint);
+        maskCanvas.setPointerCapture(event.pointerId);
+      });
+
+      maskCanvas.addEventListener("pointermove", (event) => {
+        if (!maskDrawing || !maskLastPoint) {
+          return;
+        }
+
+        const point = canvasPoint(event);
+        drawMaskLine(maskLastPoint, point);
+        maskLastPoint = point;
+      });
+
+      maskCanvas.addEventListener("pointerup", (event) => {
+        maskDrawing = false;
+        maskLastPoint = null;
+        maskCanvas.releasePointerCapture(event.pointerId);
+      });
+
+      maskCanvas.addEventListener("pointercancel", () => {
+        maskDrawing = false;
+        maskLastPoint = null;
+      });
+
+      maskClearButton.addEventListener("click", drawMaskImage);
+      maskCancelButton.addEventListener("click", () => closeMaskEditor(null));
+      maskConfirmButton.addEventListener("click", () =>
+        closeMaskEditor({
+          screenshotDataUrl: maskCanvas.toDataURL("image/png"),
+          screenshotWidth: maskCanvas.width,
+          screenshotHeight: maskCanvas.height,
+        }),
+      );
+
       window.echoOverlay.onDrop(dropCandy);
+      profileNameInput.addEventListener("input", updateProfilePreview);
+      profileForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const name = profileNameInput.value.trim();
+
+        if (!name) {
+          return;
+        }
+
+        writeStoredProfile({
+          name,
+          userId: userIdFromName(name),
+        });
+        updateProfileLabel();
+        hideProfilePanel();
+      });
+
       window.echoOverlay.onFastForward((payload = {}) => {
         const audioClass = payload.audioClass || "Keyboard_heavy";
 
@@ -730,6 +1164,11 @@
       });
 
       renderBuffers();
+      updateProfilePreview();
+      updateProfileLabel();
+      if (!readStoredProfile()) {
+        showProfilePanel();
+      }
       startMediaPipeAudioClassifier();
     </script>
   </body>

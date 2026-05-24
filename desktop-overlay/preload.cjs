@@ -11,7 +11,13 @@ contextBridge.exposeInMainWorld("echoOverlay", {
   onFastForward(callback) {
     ipcRenderer.on("echo:fast-forward", (_event, payload) => callback(payload));
   },
+  focus() {
+    ipcRenderer.send("echo:focus");
+  },
   setInteractive(enabled) {
     ipcRenderer.send("echo:interactive", enabled);
+  },
+  captureScreen() {
+    return ipcRenderer.invoke("echo:capture-screen");
   },
 });

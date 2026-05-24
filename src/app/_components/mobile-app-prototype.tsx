@@ -1,18 +1,343 @@
 "use client";
 
+/* eslint-disable @next/next/no-img-element */
+
 import {
   BarChart3,
+  Bell,
   Camera,
   MonitorDown,
   MessageCircle,
   Send,
 } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { type FormEvent, useMemo, useState, useSyncExternalStore } from "react";
 import CandyShape from "@/app/_components/candy-shape";
+import { AUDIO_CLASSES, type CandyAudioClass } from "@/lib/candy/catalog";
 import { MOBILE_USERS, type JarUser } from "@/lib/mobile/mock-data";
 
-function WorkScreenshot({ tone }: { tone: JarUser["screenshotTone"] }) {
+type EchoProfile = {
+  name: string;
+  userId: string;
+};
+
+const PROFILE_STORAGE_KEY = "echo.profile.v1";
+const WEEKLY_FEED_HOURS = 24 * 7;
+const EMPTY_WEEKLY_FEED_SNAPSHOT: WeeklyFeedSnapshot = {
+  status: "idle",
+  items: [],
+};
+const CANDY_AUDIO_CLASS_SET = new Set<string>(AUDIO_CLASSES);
+
+type WeeklyFeedApiItem = {
+  candyId: string;
+  userId: string;
+  primaryAudioClass: string;
+  audioClasses: string[];
+  durationSec: number;
+  createdTime: string;
+  screenshotUrl: string | null;
+  messages: string[];
+};
+
+type WeeklyFeedSnapshot = {
+  status: "idle" | "loading" | "ready" | "error";
+  items: WeeklyFeedApiItem[];
+  error?: string;
+};
+
+const weeklyFeedStore: {
+  snapshot: WeeklyFeedSnapshot;
+  listeners: Set<() => void>;
+  promise: Promise<void> | null;
+  eventSource: EventSource | null;
+} = {
+  snapshot: EMPTY_WEEKLY_FEED_SNAPSHOT,
+  listeners: new Set(),
+  promise: null,
+  eventSource: null,
+};
+
+function userIdFromName(name: string) {
+  const normalized = name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9\u4e00-\u9fff]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  return `user_${normalized || "echo"}`;
+}
+
+function parseStoredProfile(raw: string | null) {
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(raw) as EchoProfile;
+  } catch {
+    return null;
+  }
+}
+
+function getStoredProfileRaw() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  return window.localStorage.getItem(PROFILE_STORAGE_KEY);
+}
+
+function subscribeStoredProfile(onStoreChange: () => void) {
+  if (typeof window === "undefined") {
+    return () => {};
+  }
+
+  window.addEventListener("storage", onStoreChange);
+  window.addEventListener("echo-profile-change", onStoreChange);
+
+  return () => {
+    window.removeEventListener("storage", onStoreChange);
+    window.removeEventListener("echo-profile-change", onStoreChange);
+  };
+}
+
+function emitStoredProfileChange() {
+  window.dispatchEvent(new Event("echo-profile-change"));
+}
+
+function urlBase64ToUint8Array(base64String: string) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = window.atob(base64);
+
+  return Uint8Array.from(rawData, (character) => character.charCodeAt(0));
+}
+
+async function enablePushNotifications(userId: string) {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
+    throw new Error("This browser does not support web push.");
+  }
+
+  const keyResponse = await fetch("/api/push/public-key");
+  const keyResult = await keyResponse.json();
+
+  if (!keyResult.configured || !keyResult.publicKey) {
+    throw new Error("Web Push VAPID keys are not configured.");
+  }
+
+  const permission = await Notification.requestPermission();
+
+  if (permission !== "granted") {
+    throw new Error("Notification permission was not granted.");
+  }
+
+  const registration = await navigator.serviceWorker.ready;
+  const existing = await registration.pushManager.getSubscription();
+  const subscription =
+    existing ??
+    (await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(keyResult.publicKey),
+    }));
+
+  const subscribeResponse = await fetch("/api/push/subscribe", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      userId,
+      subscription: subscription.toJSON(),
+    }),
+  });
+  const subscribeResult = await subscribeResponse.json();
+
+  if (!subscribeResponse.ok || !subscribeResult.ok) {
+    throw new Error(subscribeResult?.error ?? "Could not register push subscription.");
+  }
+}
+
+function useStoredProfile() {
+  const rawProfile = useSyncExternalStore(subscribeStoredProfile, getStoredProfileRaw, () => null);
+
+  return useMemo(() => parseStoredProfile(rawProfile), [rawProfile]);
+}
+
+function notifyWeeklyFeedListeners() {
+  weeklyFeedStore.listeners.forEach((listener) => listener());
+}
+
+async function loadWeeklyFeed() {
+  if (weeklyFeedStore.promise) {
+    return weeklyFeedStore.promise;
+  }
+
+  weeklyFeedStore.snapshot = {
+    ...weeklyFeedStore.snapshot,
+    status: "loading",
+  };
+  notifyWeeklyFeedListeners();
+  weeklyFeedStore.promise = fetch("/api/candy?view=weekly-feed", {
+    headers: {
+      Accept: "application/json",
+    },
+  })
+    .then(async (response) => {
+      const result = await response.json();
+
+      if (!response.ok || !result.ok) {
+        throw new Error(result?.error?.message ?? "Weekly feed unavailable");
+      }
+
+      weeklyFeedStore.snapshot = {
+        status: "ready",
+        items: Array.isArray(result.items) ? result.items : [],
+      };
+    })
+    .catch((error) => {
+      weeklyFeedStore.snapshot = {
+        status: "error",
+        items: [],
+        error: error instanceof Error ? error.message : "Weekly feed unavailable",
+      };
+    })
+    .finally(() => {
+      weeklyFeedStore.promise = null;
+      notifyWeeklyFeedListeners();
+    });
+
+  return weeklyFeedStore.promise;
+}
+
+function subscribeWeeklyFeed(onStoreChange: () => void) {
+  weeklyFeedStore.listeners.add(onStoreChange);
+  ensureWeeklyFeedRealtime();
+
+  if (weeklyFeedStore.snapshot.status === "idle") {
+    void loadWeeklyFeed();
+  }
+
+  return () => {
+    weeklyFeedStore.listeners.delete(onStoreChange);
+  };
+}
+
+function getWeeklyFeedSnapshot() {
+  return weeklyFeedStore.snapshot;
+}
+
+function getWeeklyFeedServerSnapshot() {
+  return EMPTY_WEEKLY_FEED_SNAPSHOT;
+}
+
+function ensureWeeklyFeedRealtime() {
+  if (typeof window === "undefined" || weeklyFeedStore.eventSource) {
+    return;
+  }
+
+  weeklyFeedStore.eventSource = new EventSource("/api/events");
+  weeklyFeedStore.eventSource.addEventListener("candy.wrapped", () => {
+    void loadWeeklyFeed();
+  });
+}
+
+function useWeeklyFeed() {
+  return useSyncExternalStore(subscribeWeeklyFeed, getWeeklyFeedSnapshot, getWeeklyFeedServerSnapshot);
+}
+
+function weeklyScreenshotsFor(user: JarUser) {
+  return user.weeklyScreenshots
+    .filter((screenshot) => screenshot.ageHours <= WEEKLY_FEED_HOURS)
+    .sort((a, b) => a.ageHours - b.ageHours);
+}
+
+function formatAge(ageHours: number) {
+  if (ageHours < 24) {
+    return `${Math.max(1, Math.round(ageHours))}h`;
+  }
+
+  return `${Math.round(ageHours / 24)}d`;
+}
+
+function toCandyAudioClass(audioClass: string): CandyAudioClass {
+  return CANDY_AUDIO_CLASS_SET.has(audioClass) ? (audioClass as CandyAudioClass) : "Keyboard_heavy";
+}
+
+function toneForAudioClass(audioClass: string) {
+  if (audioClass === "Speech" || audioClass === "Mouse_click") {
+    return "chat" as const;
+  }
+
+  if (audioClass === "Sigh" || audioClass === "Writing" || audioClass === "Telephone") {
+    return "doc" as const;
+  }
+
+  return "code" as const;
+}
+
+function nameFromUserId(userId: string, profile: EchoProfile | null) {
+  if (profile?.userId === userId) {
+    return profile.name;
+  }
+
+  return userId.replace(/^user_/, "").replace(/-/g, " ") || "Echo user";
+}
+
+function liveUsersFromFeed(items: WeeklyFeedApiItem[], profile: EchoProfile | null): JarUser[] {
+  const grouped = new Map<string, WeeklyFeedApiItem[]>();
+
+  items
+    .filter((item) => item.screenshotUrl)
+    .forEach((item) => {
+      grouped.set(item.userId, [...(grouped.get(item.userId) ?? []), item]);
+    });
+
+  return Array.from(grouped.entries()).map(([userId, userItems], index) => {
+    const accent = ["#ef6f7f", "#65c7df", "#7cd7b8", "#f5b642", "#d78be8"][index % 5];
+    const weeklyScreenshots = userItems.map((item) => {
+      const primaryAudioClass = toCandyAudioClass(item.primaryAudioClass);
+      const audioClasses = item.audioClasses.length
+        ? item.audioClasses.map(toCandyAudioClass)
+        : [primaryAudioClass];
+      const createdAt = new Date(item.createdTime).getTime();
+      const ageHours = Number.isFinite(createdAt) ? (Date.now() - createdAt) / (60 * 60 * 1000) : 0;
+      const minutes = Math.max(1, Math.round(item.durationSec / 60));
+
+      return {
+        id: item.candyId,
+        ageHours,
+        audioClasses,
+        screenshotTone: toneForAudioClass(primaryAudioClass),
+        screenshotUrl: item.screenshotUrl ?? undefined,
+        caption: `${minutes} 分鐘工作聲音包裝截圖。`,
+        messages: item.messages ?? [],
+      };
+    });
+    const jar = Array.from(new Set(weeklyScreenshots.flatMap((screenshot) => screenshot.audioClasses))).slice(0, 4);
+
+    return {
+      id: userId,
+      name: nameFromUserId(userId, profile),
+      handle: userId,
+      online: true,
+      accent,
+      jar: jar.length ? jar : ["Keyboard_heavy"],
+      caption: "最近一週的工作截圖。",
+      weeklyScreenshots,
+    };
+  });
+}
+
+function WorkScreenshot({ tone, url }: { tone: "code" | "doc" | "chat"; url?: string }) {
+  if (url) {
+    return (
+      <div className="relative h-full min-h-0 overflow-hidden rounded-lg border border-black/15 bg-[#141312]">
+        <img className="h-full w-full object-cover" src={url} alt="" />
+      </div>
+    );
+  }
+
   const palette = {
     code: ["#65c7df", "#ef6f7f", "#f5b642"],
     doc: ["#f5b642", "#7cd7b8", "#d78be8"],
@@ -62,7 +387,17 @@ function WorkScreenshot({ tone }: { tone: JarUser["screenshotTone"] }) {
   );
 }
 
-function JarPreview({ user, active, onSelect }: { user: JarUser; active: boolean; onSelect: () => void }) {
+function JarPreview({
+  active,
+  onSelect,
+  user,
+  weeklyCount,
+}: {
+  active: boolean;
+  onSelect: () => void;
+  user: JarUser;
+  weeklyCount: number;
+}) {
   return (
     <button
       className="grid min-w-[118px] snap-center justify-items-center gap-2 text-center"
@@ -98,8 +433,11 @@ function JarPreview({ user, active, onSelect }: { user: JarUser; active: boolean
           ))}
         </span>
       </span>
-      <span className={`w-full truncate text-xs font-black ${active ? "text-[#171412]" : "text-[#62594e]"}`}>
-        {user.name}
+      <span className="grid w-full gap-0.5">
+        <span className={`truncate text-xs font-black ${active ? "text-[#171412]" : "text-[#62594e]"}`}>
+          {user.name}
+        </span>
+        <span className="text-[11px] font-black text-[#8f877d]">本週 {weeklyCount}</span>
       </span>
     </button>
   );
@@ -107,15 +445,61 @@ function JarPreview({ user, active, onSelect }: { user: JarUser; active: boolean
 
 export default function MobileAppPrototype() {
   const [activeId, setActiveId] = useState(MOBILE_USERS[0].id);
+  const [activeScreenshotIndex, setActiveScreenshotIndex] = useState(0);
   const [draft, setDraft] = useState("");
+  const profile = useStoredProfile();
+  const weeklyFeed = useWeeklyFeed();
+  const [nameDraft, setNameDraft] = useState("");
+  const [pushStatus, setPushStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [messages, setMessages] = useState<Record<string, string[]>>(
-    Object.fromEntries(MOBILE_USERS.map((user) => [user.id, user.messages])),
+    Object.fromEntries(
+      MOBILE_USERS.flatMap((user) => user.weeklyScreenshots.map((screenshot) => [screenshot.id, screenshot.messages])),
+    ),
+  );
+  const liveUsers = useMemo(() => liveUsersFromFeed(weeklyFeed.items, profile), [profile, weeklyFeed.items]);
+  const users = useMemo(
+    () =>
+      liveUsers.length
+        ? liveUsers
+        : MOBILE_USERS.map((user) =>
+            user.id === "you" && profile
+              ? {
+                  ...user,
+                  name: profile.name,
+                  handle: profile.userId,
+                  caption: "這是你的工作糖果罐，桌面端使用同一個名稱即可同步。",
+                }
+              : user,
+          ),
+    [liveUsers, profile],
   );
   const activeUser = useMemo(
-    () => MOBILE_USERS.find((user) => user.id === activeId) ?? MOBILE_USERS[0],
-    [activeId],
+    () => users.find((user) => user.id === activeId) ?? users[0],
+    [activeId, users],
   );
-  const activeMessages = messages[activeUser.id] ?? [];
+  const activeWeeklyScreenshots = useMemo(() => weeklyScreenshotsFor(activeUser), [activeUser]);
+  const activeScreenshot = activeWeeklyScreenshots.length
+    ? activeWeeklyScreenshots[activeScreenshotIndex % activeWeeklyScreenshots.length]
+    : null;
+  const activeMessages = activeScreenshot ? (messages[activeScreenshot.id] ?? activeScreenshot.messages ?? []) : [];
+
+  function saveProfile(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const name = nameDraft.trim();
+
+    if (!name) {
+      return;
+    }
+
+    const nextProfile = {
+      name,
+      userId: userIdFromName(name),
+    };
+
+    window.localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(nextProfile));
+    emitStoredProfileChange();
+  }
 
   function sendMessage() {
     const text = draft.trim();
@@ -124,11 +508,25 @@ export default function MobileAppPrototype() {
       return;
     }
 
+    if (!activeScreenshot) {
+      return;
+    }
+
     setMessages((current) => ({
       ...current,
-      [activeUser.id]: [...(current[activeUser.id] ?? []), `You: ${text}`],
+      [activeScreenshot.id]: [...(current[activeScreenshot.id] ?? []), `You: ${text}`],
     }));
     setDraft("");
+  }
+
+  async function handleEnablePush() {
+    try {
+      setPushStatus("loading");
+      await enablePushNotifications(profile?.userId ?? "mobile-demo-user");
+      setPushStatus("ready");
+    } catch {
+      setPushStatus("error");
+    }
   }
 
   return (
@@ -143,23 +541,41 @@ export default function MobileAppPrototype() {
             <MonitorDown aria-hidden className="size-4" />
           </Link>
           <h1 className="text-base font-black">Echo</h1>
-          <Link
-            className="grid size-9 place-items-center rounded-md border border-black/10 bg-white/60"
-            href="/mobile/data"
-            aria-label="Open data page"
-          >
-            <BarChart3 aria-hidden className="size-4" />
-          </Link>
+          <div className="flex gap-2">
+            <button
+              className={`grid size-9 place-items-center rounded-md border border-black/10 bg-white/60 ${
+                pushStatus === "ready" ? "text-[#2da66f]" : pushStatus === "error" ? "text-[#ef6f7f]" : ""
+              }`}
+              type="button"
+              onClick={handleEnablePush}
+              aria-label="Enable notifications"
+              title={pushStatus === "ready" ? "Notifications ready" : "Enable notifications"}
+              disabled={pushStatus === "loading"}
+            >
+              <Bell aria-hidden className="size-4" />
+            </button>
+            <Link
+              className="grid size-9 place-items-center rounded-md border border-black/10 bg-white/60"
+              href="/mobile/data"
+              aria-label="Open data page"
+            >
+              <BarChart3 aria-hidden className="size-4" />
+            </Link>
+          </div>
         </header>
 
         <section className="h-[28svh] min-h-[170px] shrink-0 border-b border-black/10 bg-[#fbf4e6] px-4 py-4">
           <div className="flex h-full snap-x gap-4 overflow-x-auto pb-2">
-            {MOBILE_USERS.map((user) => (
+            {users.map((user) => (
               <JarPreview
                 key={user.id}
                 user={user}
+                weeklyCount={weeklyScreenshotsFor(user).length}
                 active={user.id === activeUser.id}
-                onSelect={() => setActiveId(user.id)}
+                onSelect={() => {
+                  setActiveId(user.id);
+                  setActiveScreenshotIndex(0);
+                }}
               />
             ))}
           </div>
@@ -176,7 +592,9 @@ export default function MobileAppPrototype() {
               </span>
               <div className="min-w-0">
                 <p className="truncate font-black">{activeUser.name}</p>
-                <p className="truncate text-xs font-semibold text-[#62594e]">{activeUser.caption}</p>
+                <p className="truncate text-xs font-semibold text-[#62594e]">
+                  {activeScreenshot ? activeScreenshot.caption : activeUser.caption}
+                </p>
               </div>
             </div>
             <button className="grid size-9 shrink-0 place-items-center rounded-md border border-black/10 bg-white/60" type="button" aria-label="Reply with camera">
@@ -185,10 +603,46 @@ export default function MobileAppPrototype() {
           </div>
 
           <div className="min-h-[280px] flex-1 px-4">
-            <WorkScreenshot tone={activeUser.screenshotTone} />
+            {activeScreenshot ? (
+              <div className="grid h-full min-h-0 grid-rows-[auto_1fr] gap-2">
+                <div className="flex items-center justify-between text-xs font-black text-[#62594e]">
+                  <span>{formatAge(activeScreenshot.ageHours)} ago</span>
+                  <span>
+                    {activeScreenshotIndex + 1}/{activeWeeklyScreenshots.length}
+                  </span>
+                </div>
+                <WorkScreenshot tone={activeScreenshot.screenshotTone} url={activeScreenshot.screenshotUrl} />
+              </div>
+            ) : (
+              <div className="grid h-full place-items-center rounded-lg border border-dashed border-black/18 bg-[#fffaf0] px-6 text-center">
+                <p className="text-sm font-black leading-6 text-[#62594e]">本週還沒有包裝截圖。</p>
+              </div>
+            )}
           </div>
 
           <div className="shrink-0 px-4 pb-4 pt-3">
+            {activeWeeklyScreenshots.length > 1 ? (
+              <div className="mb-3 grid grid-cols-2 gap-2">
+                <button
+                  className="h-9 rounded-md border border-black/10 bg-[#fffaf0] text-xs font-black"
+                  type="button"
+                  onClick={() =>
+                    setActiveScreenshotIndex((current) =>
+                      current === 0 ? activeWeeklyScreenshots.length - 1 : current - 1,
+                    )
+                  }
+                >
+                  上一張
+                </button>
+                <button
+                  className="h-9 rounded-md border border-black/10 bg-[#fffaf0] text-xs font-black"
+                  type="button"
+                  onClick={() => setActiveScreenshotIndex((current) => (current + 1) % activeWeeklyScreenshots.length)}
+                >
+                  下一張
+                </button>
+              </div>
+            ) : null}
             <div className="mb-3 flex max-h-20 flex-col gap-2 overflow-auto">
               {activeMessages.length ? (
                 activeMessages.slice(-2).map((message, index) => (
@@ -209,7 +663,7 @@ export default function MobileAppPrototype() {
                 <input
                   className="h-11 w-full rounded-md border border-black/12 bg-[#fffaf0] pl-10 pr-3 text-sm font-semibold outline-none focus:border-black/50"
                   value={draft}
-                  placeholder={`回覆 ${activeUser.name}`}
+                  placeholder={activeScreenshot ? `回覆 ${activeUser.name}` : "等待本週截圖"}
                   onChange={(event) => setDraft(event.target.value)}
                   onKeyDown={(event) => {
                     if (event.key === "Enter") {
@@ -218,13 +672,46 @@ export default function MobileAppPrototype() {
                   }}
                 />
               </div>
-              <button className="grid size-11 shrink-0 place-items-center rounded-md bg-[#171412] text-[#fff7e6]" type="button" onClick={sendMessage} aria-label="Send">
+              <button
+                className="grid size-11 shrink-0 place-items-center rounded-md bg-[#171412] text-[#fff7e6] disabled:opacity-40"
+                type="button"
+                onClick={sendMessage}
+                disabled={!activeScreenshot}
+                aria-label="Send"
+              >
                 <Send aria-hidden className="size-4" />
               </button>
             </div>
           </div>
         </section>
       </section>
+
+      {!profile ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-[#171412]/78 px-5 backdrop-blur-sm">
+          <form className="w-full max-w-[340px] rounded-lg bg-[#fffaf0] p-5 shadow-[0_24px_80px_rgba(0,0,0,.32)]" onSubmit={saveProfile}>
+            <p className="text-xs font-black uppercase tracking-[0.08em] text-[#62594e]">Echo onboarding</p>
+            <h2 className="mt-2 text-2xl font-black">你的糖果罐名稱</h2>
+            <p className="mt-2 text-sm font-semibold leading-6 text-[#62594e]">
+              手機和桌面端輸入同一個名稱，就會使用同一個 User_ID 寫入 Notion。
+            </p>
+            <input
+              className="mt-5 h-12 w-full rounded-md border border-black/12 bg-white px-3 text-base font-black outline-none focus:border-black/55"
+              value={nameDraft}
+              placeholder="例如 Yuhsiang"
+              autoFocus
+              onChange={(event) => setNameDraft(event.target.value)}
+            />
+            {nameDraft.trim() ? (
+              <p className="mt-3 truncate rounded-md bg-[#f6f1e7] px-3 py-2 text-xs font-bold text-[#62594e]">
+                User_ID: {userIdFromName(nameDraft)}
+              </p>
+            ) : null}
+            <button className="mt-5 h-12 w-full rounded-md bg-[#171412] text-sm font-black text-[#fff7e6]" type="submit">
+              開始使用
+            </button>
+          </form>
+        </div>
+      ) : null}
     </main>
   );
 }

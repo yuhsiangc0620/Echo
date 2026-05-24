@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "next dev",
     "overlay": "electron desktop-overlay/main.cjs",
-    "desktop:dist": "electron-builder --mac zip --publish never",
+    "desktop:dist": "npm run desktop:dist:mac",
+    "desktop:dist:mac": "electron-builder --mac zip --arm64 --publish never",
+    "desktop:dist:win": "electron-builder --win zip --x64 --publish never",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"
@@ -16,13 +18,15 @@
     "lucide-react": "^1.16.0",
     "next": "16.2.6",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/web-push": "^3.6.4",
     "electron": "^41.7.0",
     "electron-builder": "^26.8.1",
     "eslint": "^9",
@@ -46,9 +50,16 @@
       "target": [
         "zip"
       ],
+      "artifactName": "Echo-${version}-${arch}-mac.${ext}",
       "extendInfo": {
         "NSMicrophoneUsageDescription": "Echo uses the microphone for on-device MediaPipe audio classification. Audio is not saved."
       }
+    },
+    "win": {
+      "target": [
+        "zip"
+      ],
+      "artifactName": "Echo-${version}-${arch}-win.${ext}"
     }
   }
 }
