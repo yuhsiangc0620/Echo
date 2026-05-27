@@ -1,20 +1,42 @@
 @import "tailwindcss";
 
+/* ──────────────────────────────────────────────────────────────────────
+   BAG — committed aesthetic direction
+   ──────────────────────────────────────────────────────────────────────
+   Concept: a minimal poster. Each user's weekly candies sit inside a
+   translucent bag. Lots of off-white negative space, very thin ink
+   linework, and soft candies without characters or facial features.
+   Candies are soft pillowy gradient circles (no glossy 3D, no
+   specular highlights) — they read as marshmallows in vellum.
+
+   Algorithmic art role: candy positions inside each bag and the bag
+   silhouette are seeded by user id so each bag feels hand-arranged but
+   stays stable across renders.
+   ────────────────────────────────────────────────────────────────────── */
 :root {
-  --background: #f6f1e7;
-  --foreground: #171412;
-  --ink-muted: #62594e;
-  --panel: rgba(255, 252, 244, 0.86);
-  --panel-strong: #fffaf0;
-  --line: rgba(23, 20, 18, 0.14);
-  --line-strong: rgba(23, 20, 18, 0.24);
-  --charcoal: #171412;
-  --amber: #f5b642;
-  --rose: #ef6f7f;
-  --mint: #7cd7b8;
-  --cyan: #65c7df;
-  --violet: #a895ff;
-  --cream: #fff7e6;
+  --paper: #fffefd;            /* gallery white with a tiny warm pulse */
+  --paper-mid: #faf8f5;        /* faint section background */
+  --ink: #1c1916;              /* near-black */
+  --ink-muted: #6e6760;        /* secondary text */
+  --ink-soft: #a8a098;         /* tertiary / placeholder */
+  --ribbon: #ff1f63;           /* accent pink */
+  --line: rgba(28, 25, 22, 0.24); /* delicate bag line color */
+  --rule: rgba(28, 25, 22, 0.10);
+  --rule-soft: rgba(28, 25, 22, 0.045);
+
+  /* Legacy aliases — keep old class names working */
+  --background: var(--paper);
+  --foreground: var(--ink);
+  --panel: rgba(255, 255, 255, 0.74);
+  --panel-strong: rgba(255, 255, 255, 0.92);
+  --line-strong: var(--rule);
+  --charcoal: var(--ink);
+  --amber: #ffd28a;
+  --rose: var(--ribbon);
+  --mint: #b8e7c9;
+  --cyan: #b8d6ee;
+  --violet: #d0c4ee;
+  --cream: var(--paper);
 }
 
 @theme inline {
@@ -24,23 +46,32 @@
   --font-mono: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
 }
 
+/* Distinctive display face — Fraunces with optical sizing + soft corners.
+   Used for editorial moments (wordmark, names, timestamps, eyebrows). */
+.font-display {
+  font-family: var(--font-fraunces), "Iowan Old Style", "Apple Garamond", Georgia, serif;
+  font-variation-settings: "opsz" 48, "SOFT" 60, "WONK" 0;
+}
+.font-display-wonk {
+  font-family: var(--font-fraunces), "Iowan Old Style", "Apple Garamond", Georgia, serif;
+  font-variation-settings: "opsz" 96, "SOFT" 100, "WONK" 1;
+  font-style: italic;
+}
+
 * {
   box-sizing: border-box;
 }
 
 html {
-  background: var(--background);
+  background: var(--paper);
+  overflow-x: clip;
 }
 
 body {
   min-width: 320px;
-  background:
-    linear-gradient(rgba(23, 20, 18, 0.055) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(23, 20, 18, 0.045) 1px, transparent 1px),
-    radial-gradient(circle at 12% 0%, rgba(245, 182, 66, 0.18), transparent 34rem),
-    linear-gradient(135deg, #f7f0df 0%, #f8f4ea 36%, #edf4f1 100%);
-  background-size: 28px 28px, 28px 28px, auto, auto;
-  color: var(--foreground);
+  overflow-x: clip;
+  background: var(--paper);
+  color: var(--ink);
   font-family: "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
   letter-spacing: 0;
 }
@@ -61,7 +92,59 @@ button:disabled {
 }
 
 ::selection {
-  background: rgba(245, 182, 66, 0.36);
+  background: rgba(255, 31, 99, 0.16);
+}
+
+.echo-hide-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  scrollbar-color: transparent transparent;
+}
+
+.echo-hide-scrollbar::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+.echo-hide-scrollbar::-webkit-scrollbar-track,
+.echo-hide-scrollbar::-webkit-scrollbar-thumb {
+  background: transparent;
+}
+
+.echo-mobile-app,
+.echo-mobile-app * {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.echo-mobile-app::-webkit-scrollbar,
+.echo-mobile-app *::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+  display: none !important;
+}
+
+.echo-jar-carousel,
+.echo-jar-carousel * {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.echo-jar-carousel {
+  overflow: clip;
+  overscroll-behavior-x: none;
+  -webkit-touch-callout: none;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  scrollbar-color: transparent transparent;
+}
+
+.echo-jar-carousel::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
 }
 
 .echo-panel {
@@ -158,165 +241,110 @@ button:disabled {
   animation: meter-spark 980ms ease-in-out infinite;
 }
 
+/* === Soft bloom candies — flat reference-gradient style ==================
+ * No face, no hard outline, no highlight, no shadow. Each candy is a
+ * blurred color field, so the perimeter dissolves like the reference image.
+ * ========================================================================= */
+
 .candy-shape {
+  --candy-gradient: linear-gradient(180deg, #75a0ff 0%, #75a0ff 50%, #e8eb76 100%);
   position: relative;
   display: inline-grid;
   place-items: center;
   flex: 0 0 auto;
-  filter: drop-shadow(0 12px 16px rgba(23, 20, 18, 0.22));
+  overflow: visible;
+  border-radius: 50%;
+  background: transparent;
+  opacity: 0.96;
+  isolation: isolate;
+  transform: translateZ(0);
 }
 
-.candy-shape::before,
+.candy-shape::before {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  inset: -5%;
+  border-radius: inherit;
+  background: var(--candy-gradient);
+  filter: blur(2.4px) saturate(1.05);
+  opacity: 0.54;
+}
+
 .candy-shape::after {
   content: "";
   position: absolute;
+  z-index: 1;
+  inset: 3%;
+  border-radius: inherit;
+  background: var(--candy-gradient);
+  filter: blur(1.15px) saturate(1.03);
+  opacity: 0.88;
 }
 
+/* 1. Keyboard_heavy → pink-magenta flat bloom */
 .candy-keyboard {
-  border-radius: 46% 54% 50% 50%;
-  background:
-    radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.88) 0 8%, transparent 9%),
-    conic-gradient(from 18deg, #f05d6c, #f5b642, #f05d6c, #f05d6c);
+  --candy-gradient:
+    linear-gradient(180deg, #ff73cf 0%, #f166d5 62%, #a772ff 100%);
 }
 
-.candy-keyboard::before {
-  inset: -14%;
-  z-index: -1;
-  background: repeating-conic-gradient(from 8deg, #f05d6c 0 10deg, transparent 10deg 22deg);
-  clip-path: polygon(
-    50% 0%,
-    58% 31%,
-    86% 13%,
-    69% 42%,
-    100% 50%,
-    69% 58%,
-    86% 87%,
-    58% 69%,
-    50% 100%,
-    42% 69%,
-    14% 87%,
-    31% 58%,
-    0% 50%,
-    31% 42%,
-    14% 13%,
-    42% 31%
-  );
-}
-
+/* 2. Sigh → orange-pink flat bloom */
 .candy-sigh {
-  border-radius: 46% 54% 48% 52%;
-  background:
-    radial-gradient(circle at 35% 28%, rgba(255, 255, 255, 0.9) 0 12%, transparent 13%),
-    linear-gradient(145deg, #fff9f5, #bde9ef 62%, #8cc8d9);
+  --candy-gradient:
+    linear-gradient(180deg, #ff9b52 0%, #ff8c64 66%, #ff82b4 100%);
 }
 
-.candy-sigh::before {
-  width: 44%;
-  height: 44%;
-  left: -12%;
-  bottom: 7%;
-  border-radius: 50%;
-  background: #d9f5f6;
-}
-
-.candy-sigh::after {
-  width: 50%;
-  height: 50%;
-  right: -13%;
-  top: 20%;
-  border-radius: 50%;
-  background: #a9dbe8;
-}
-
+/* 3. Mouse_click → lime-purple flat bloom */
 .candy-mouse {
-  border-radius: 999px;
-  background:
-    linear-gradient(90deg, transparent 0 16%, rgba(255, 255, 255, 0.62) 16% 28%, transparent 28% 44%, rgba(255, 255, 255, 0.46) 44% 56%, transparent 56% 100%),
-    linear-gradient(135deg, #79d8b7, #f6d46d);
+  --candy-gradient:
+    linear-gradient(180deg, #baff58 0%, #b8f06e 43%, #9f78ff 100%);
 }
 
-.candy-mouse::before,
-.candy-mouse::after {
-  top: 28%;
-  width: 24%;
-  height: 44%;
-  border: 2px solid rgba(23, 20, 18, 0.2);
-  background: #fff7e6;
-}
-
-.candy-mouse::before {
-  left: -18%;
-  border-radius: 70% 30% 30% 70%;
-}
-
-.candy-mouse::after {
-  right: -18%;
-  border-radius: 30% 70% 70% 30%;
-}
-
+/* 4. Speech → purple flat bloom */
 .candy-speech {
-  border-radius: 54% 46% 58% 42%;
-  background:
-    radial-gradient(circle at 35% 28%, rgba(255, 255, 255, 0.88) 0 10%, transparent 11%),
-    linear-gradient(145deg, #f6d5ff, #d78be8 54%, #8f6fca);
+  --candy-gradient:
+    linear-gradient(180deg, #df8cff 0%, #bd6cff 48%, #8760ff 100%);
 }
 
-.candy-speech::after {
-  width: 22%;
-  height: 22%;
-  right: 4%;
-  bottom: -7%;
-  border-radius: 0 0 100% 0;
-  background: #d78be8;
-  transform: rotate(34deg);
-}
-
+/* 5. Music → yellow-pink flat bloom */
 .candy-music {
-  border-radius: 50%;
-  background:
-    repeating-conic-gradient(from 8deg, rgba(255, 255, 255, 0.72) 0 9deg, transparent 9deg 22deg),
-    conic-gradient(from 30deg, #f5b642, #ef6f7f, #65c7df, #f5b642);
+  --candy-gradient:
+    linear-gradient(90deg, #ff8cb8 0%, #ffe96a 28%, #ffe96a 100%);
 }
 
+/* 6. Air_conditioner → aqua-purple flat bloom */
 .candy-air {
-  border-radius: 999px 42% 999px 42%;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.82), transparent 45%),
-    linear-gradient(145deg, #e6fbff, #8fd8e8 56%, #7cd7b8);
+  --candy-gradient:
+    linear-gradient(135deg, #7ee8ff 0%, #7ee8ff 60%, #9877ff 100%);
 }
 
+/* 7. Traffic → blue-yellow flat bloom */
 .candy-traffic {
-  border-radius: 18% 50% 18% 50%;
-  background:
-    linear-gradient(45deg, transparent 42%, rgba(245, 182, 66, 0.9) 42% 54%, transparent 54%),
-    linear-gradient(135deg, #44413b, #837d72);
+  --candy-gradient:
+    linear-gradient(180deg, #6694ff 0%, #6694ff 58%, #e7ec75 100%);
 }
 
+/* 8. Door_knock → coral-orange flat bloom */
 .candy-door {
-  border-radius: 8px 18px 8px 18px;
-  background:
-    radial-gradient(circle at 72% 42%, #171412 0 6%, transparent 7%),
-    linear-gradient(145deg, #e8bd83, #c28f5a);
+  --candy-gradient:
+    linear-gradient(180deg, #ff8845 0%, #ff8655 68%, #ff86ad 100%);
 }
 
+/* 9. Silence → pale-blue flat bloom */
 .candy-silence {
-  border-radius: 18% 48% 18% 48%;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.7), transparent 42%),
-    linear-gradient(145deg, #dff7cc, #86d8bc 45%, #59b9c7);
-  transform: rotate(45deg);
+  --candy-gradient:
+    linear-gradient(135deg, #a2edff 0%, #88e3f4 64%, #8fbfff 100%);
 }
 
-.candy-silence > span {
-  transform: rotate(-45deg);
-}
-
+/* Wrapped band — minimal thin band, no gloss */
 .wrapped-band {
   position: absolute;
-  inset: 38% -10%;
-  border-top: 2px solid rgba(23, 20, 18, 0.38);
-  border-bottom: 2px solid rgba(23, 20, 18, 0.38);
-  background: rgba(255, 250, 240, 0.72);
+  inset: 44% -8%;
+  z-index: 3;
+  height: 12%;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.85);
+  border: 0.5px solid rgba(28, 25, 22, 0.18);
 }
 
 .screenshot-mock {
@@ -412,4 +440,102 @@ button:disabled {
     opacity: 1;
     transform: scaleY(1);
   }
+}
+
+/* === BAG — minimal poster utilities ====================================== */
+
+/* Eyebrow microcaps — sparingly used, paired with hand-drawn marks */
+.echo-eyebrow {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+/* Tabular numerals */
+.echo-num {
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "tnum" 1, "lnum" 1;
+}
+
+/* Hairline section divider — barely-there */
+.echo-hairline {
+  position: relative;
+}
+.echo-hairline::after {
+  content: "";
+  position: absolute;
+  left: 20px;
+  right: 20px;
+  bottom: 0;
+  height: 1px;
+  background: var(--rule);
+}
+
+/* Hand-drawn wobble — a single sketched underline for important text */
+.echo-underline {
+  position: relative;
+  display: inline-block;
+}
+.echo-underline::after {
+  content: "";
+  position: absolute;
+  left: -2px;
+  right: -2px;
+  bottom: -4px;
+  height: 4px;
+  background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 4' preserveAspectRatio='none'><path d='M1 2 Q 25 0 50 2 T 99 2' fill='none' stroke='%23ff1f63' stroke-width='1.4' stroke-linecap='round'/></svg>") center/100% 100% no-repeat;
+}
+
+/* Press affordance — subtle, no fancy shadow */
+.echo-press {
+  transition: transform 140ms ease, opacity 140ms ease;
+}
+.echo-press:active {
+  transform: scale(0.97);
+  opacity: 0.85;
+}
+
+
+/* === Stagger entrance ======================================================
+ * Use inline style { ['--i' as any]: index } on items inside a list to get
+ * a graceful, staggered fade+rise reveal that respects reduced-motion.
+ * ========================================================================= */
+.echo-rise {
+  opacity: 0;
+  transform: translateY(14px);
+  animation: echo-rise 720ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  animation-delay: calc(var(--i, 0) * 75ms + 60ms);
+}
+@keyframes echo-rise {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .echo-rise {
+    opacity: 1;
+    transform: none;
+    animation: none;
+  }
+}
+
+/* Candy modifiers — hue/saturation tints only, no light or shadow. */
+.candy-mod-music {
+  filter: hue-rotate(250deg) saturate(1.1);
+}
+.candy-mod-speech {
+  filter: hue-rotate(95deg) saturate(0.9);
+}
+.candy-mod-outdoor {
+  filter: saturate(0.5);
+}
+.candy-mod-cold {
+  filter: hue-rotate(185deg) saturate(1.15);
+}
+.candy-mod-quiet {
+  filter: saturate(0.25);
 }

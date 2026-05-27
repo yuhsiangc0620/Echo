@@ -5,16 +5,23 @@
 import {
   BarChart3,
   Bell,
-  Camera,
   MonitorDown,
   MessageCircle,
   Send,
 } from "lucide-react";
 import Link from "next/link";
-import { type FormEvent, useMemo, useState, useSyncExternalStore } from "react";
+import {
+  type FormEvent,
+  type PointerEvent,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type WheelEvent,
+} from "react";
 import CandyShape from "@/app/_components/candy-shape";
 import { AUDIO_CLASSES, type CandyAudioClass } from "@/lib/candy/catalog";
-import { MOBILE_USERS, type JarUser } from "@/lib/mobile/mock-data";
+import { MOBILE_USERS, type JarUser, type WeeklyScreenshot } from "@/lib/mobile/mock-data";
 
 type EchoProfile = {
   name: string;
@@ -23,6 +30,7 @@ type EchoProfile = {
 
 const PROFILE_STORAGE_KEY = "echo.profile.v1";
 const WEEKLY_FEED_HOURS = 24 * 7;
+const JAR_SLOT_WIDTH = 86;
 const EMPTY_WEEKLY_FEED_SNAPSHOT: WeeklyFeedSnapshot = {
   status: "idle",
   items: [],
@@ -294,7 +302,7 @@ function liveUsersFromFeed(items: WeeklyFeedApiItem[], profile: EchoProfile | nu
     });
 
   return Array.from(grouped.entries()).map(([userId, userItems], index) => {
-    const accent = ["#ef6f7f", "#65c7df", "#7cd7b8", "#f5b642", "#d78be8"][index % 5];
+    const accent = ["#ff8aa6", "#92c8f3", "#88e0b0", "#ffc878", "#b896f5"][index % 5];
     const weeklyScreenshots = userItems.map((item) => {
       const primaryAudioClass = toCandyAudioClass(item.primaryAudioClass);
       const audioClasses = item.audioClasses.length
@@ -314,7 +322,10 @@ function liveUsersFromFeed(items: WeeklyFeedApiItem[], profile: EchoProfile | nu
         messages: item.messages ?? [],
       };
     });
-    const jar = Array.from(new Set(weeklyScreenshots.flatMap((screenshot) => screenshot.audioClasses))).slice(0, 4);
+    const jar = weeklyScreenshots
+      .filter((screenshot) => screenshot.ageHours <= WEEKLY_FEED_HOURS)
+      .map((screenshot) => screenshot.audioClasses[0])
+      .filter((audioClass): audioClass is CandyAudioClass => Boolean(audioClass));
 
     return {
       id: userId,
@@ -322,7 +333,7 @@ function liveUsersFromFeed(items: WeeklyFeedApiItem[], profile: EchoProfile | nu
       handle: userId,
       online: true,
       accent,
-      jar: jar.length ? jar : ["Keyboard_heavy"],
+      jar,
       caption: "最近一週的工作截圖。",
       weeklyScreenshots,
     };
@@ -332,58 +343,283 @@ function liveUsersFromFeed(items: WeeklyFeedApiItem[], profile: EchoProfile | nu
 function WorkScreenshot({ tone, url }: { tone: "code" | "doc" | "chat"; url?: string }) {
   if (url) {
     return (
-      <div className="relative h-full min-h-0 overflow-hidden rounded-lg border border-black/15 bg-[#141312]">
+      <div className="relative h-full min-h-0 overflow-hidden rounded-[10px] bg-[var(--paper-mid)]">
         <img className="h-full w-full object-cover" src={url} alt="" />
       </div>
     );
   }
 
   const palette = {
-    code: ["#65c7df", "#ef6f7f", "#f5b642"],
-    doc: ["#f5b642", "#7cd7b8", "#d78be8"],
-    chat: ["#7cd7b8", "#65c7df", "#c28f5a"],
+    code: ["#83e0ff", "#ff8fb5", "#ffe56f"],
+    doc: ["#ffe56f", "#b6ff76", "#c68cff"],
+    chat: ["#b6ff76", "#83e0ff", "#ff905d"],
   }[tone];
 
   return (
-    <div className="relative h-full min-h-0 overflow-hidden rounded-lg border border-black/15 bg-[#141312]">
-      <div className="absolute left-0 top-0 z-10 flex h-10 w-full items-center gap-2 border-b border-white/10 bg-black/28 px-3">
-        <span className="size-2 rounded-full bg-[#ef6f7f]" />
-        <span className="size-2 rounded-full bg-[#f5b642]" />
-        <span className="size-2 rounded-full bg-[#7cd7b8]" />
-        <span className="ml-2 h-2.5 w-28 rounded-sm bg-white/16" />
+    <div className="relative h-full min-h-0 overflow-hidden rounded-[10px] bg-[#fffdf8]">
+      <div
+        className="absolute inset-0 opacity-80"
+        style={{
+          background:
+            "linear-gradient(90deg, rgba(28,25,22,.035) 1px, transparent 1px), linear-gradient(rgba(28,25,22,.025) 1px, transparent 1px)",
+          backgroundSize: "28px 28px",
+        }}
+      />
+      <span
+        className="absolute left-[9%] top-[12%] h-[34%] w-[38%] rounded-full blur-[18px]"
+        style={{ background: palette[0], opacity: 0.54 }}
+      />
+      <span
+        className="absolute right-[10%] top-[22%] h-[22%] w-[32%] rounded-full blur-[18px]"
+        style={{ background: palette[1], opacity: 0.55 }}
+      />
+      <span
+        className="absolute bottom-[11%] left-[28%] h-[30%] w-[42%] rounded-full blur-[20px]"
+        style={{ background: palette[2], opacity: 0.48 }}
+      />
+      <div className="absolute left-4 right-4 top-4 z-10 flex items-center gap-2">
+        <span className="h-1.5 w-16 rounded-full bg-[rgba(28,25,22,.10)]" />
+        <span className="h-1.5 w-9 rounded-full bg-[rgba(28,25,22,.06)]" />
       </div>
-      <div className="absolute inset-x-4 bottom-4 top-14 grid grid-cols-[0.68fr_1fr] gap-3 text-xs">
-        <div className="space-y-2">
-          {Array.from({ length: 13 }).map((_, index) => (
-            <div key={`mobile-line-${index}`} className="flex items-center gap-2">
-              <span className="font-mono text-white/24">{(index + 21).toString().padStart(2, "0")}</span>
-              <span
-                className="h-2 rounded-sm"
-                style={{
-                  width: `${42 + ((index * 19) % 44)}%`,
-                  background: index % 3 === 0 ? palette[0] : index % 3 === 1 ? palette[1] : "rgba(255,255,255,.22)",
-                }}
-              />
-            </div>
-          ))}
-        </div>
-        <div className="grid content-start gap-3">
-          <div className="h-20 rounded-md border border-white/10 bg-white/8 p-3">
-            <div className="mb-3 h-2 w-28 rounded-sm" style={{ background: palette[1] }} />
-            <div className="h-2 w-4/5 rounded-sm bg-white/22" />
-          </div>
-          <div className="h-32 rounded-md border border-white/10 bg-white/8 p-3">
-            <div className="mb-3 h-2 w-20 rounded-sm" style={{ background: palette[0] }} />
-            <div className="mb-2 h-2 w-5/6 rounded-sm bg-white/22" />
-            <div className="mb-2 h-2 w-2/3 rounded-sm" style={{ background: palette[2] }} />
-            <div className="h-2 w-3/5 rounded-sm bg-white/18" />
-          </div>
-        </div>
-      </div>
-      <span className="absolute left-[14%] top-[46%] z-20 h-8 w-[42%] rounded-[3px] bg-black" />
-      <span className="absolute right-[9%] top-[30%] z-20 h-7 w-[34%] rounded-[3px] bg-black" />
-      <span className="absolute bottom-[18%] right-[18%] z-20 h-7 w-[28%] rounded-[3px] bg-black" />
+      <span className="absolute left-[12%] top-[42%] z-20 h-7 w-[44%] rounded-[3px] bg-[var(--ink)]" />
+      <span className="absolute right-[10%] top-[31%] z-20 h-6 w-[31%] rounded-[3px] bg-[var(--ink)]" />
+      <span className="absolute bottom-[18%] right-[19%] z-20 h-6 w-[27%] rounded-[3px] bg-[var(--ink)]" />
     </div>
+  );
+}
+
+// (Jar-ring geometry constants removed — replaced by translucent Bag SVG.)
+
+/* === Algorithmic helpers =================================================
+ * Deterministic hashing + mulberry32 PRNG let us generate per-user visuals
+ * (avatar palette, candy jitter) that stay stable across renders.
+ * ======================================================================= */
+function hashString(input: string): number {
+  let h = 2166136261 >>> 0; // FNV-1a basis
+  for (let i = 0; i < input.length; i++) {
+    h ^= input.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function mulberry32(seed: number) {
+  let s = seed >>> 0;
+  return () => {
+    s = (s + 0x6d2b79f5) >>> 0;
+    let t = s;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/* ───── BAG — translucent candy bag ──────────────────────────────────────
+ * Pure SVG composition. Bag silhouette has gathered ridges on top and a
+ * very light vellum outline. No internal folds, ribbons, or shadow bands.
+ * ─────────────────────────────────────────────────────────────────────── */
+function Bag({
+  width = 92,
+  height = 116,
+  active = false,
+  children,
+}: {
+  width?: number;
+  height?: number;
+  active?: boolean;
+  children?: React.ReactNode;
+}) {
+  return (
+    <span className="relative inline-block" style={{ width, height }}>
+      {/* SVG bag silhouette */}
+      <svg
+        viewBox="0 0 100 130"
+        width={width}
+        height={height}
+        fill="none"
+        aria-hidden
+        className="absolute inset-0"
+        preserveAspectRatio="none"
+      >
+        {/* translucent vellum fill */}
+        <path
+          d="M 28 19
+             Q 33 8 40 20
+             Q 48 7 56 20
+             Q 64 8 72 20
+             Q 82 22 84 35
+             C 88 62 94 92 94 119
+             C 80 122 62 123 49 123
+             C 36 123 20 122 7 120
+             C 8 92 15 61 18 35
+             Q 18 22 28 19 Z"
+          fill="rgba(255,255,255,.46)"
+          stroke="rgba(28,25,22,.16)"
+          strokeWidth={active ? "1.05" : "0.8"}
+          strokeLinejoin="round"
+        />
+      </svg>
+
+      {/* Candies inside */}
+      <span className="absolute inset-0 z-[1]">{children}</span>
+    </span>
+  );
+}
+
+/* Algorithmic candy packing — bottom-up rows inside the bag.
+ * Seed by userId so candies settle differently but always accumulate upward. */
+function packedCandyPositions(seed: string, count: number) {
+  const rng = mulberry32(hashString(seed));
+  const positions: { left: number; top: number; rot: number }[] = [];
+  let placed = 0;
+  let row = 0;
+
+  while (placed < count) {
+    const remaining = count - placed;
+    const colsInRow = Math.min(3, remaining);
+    const rowWidth = colsInRow === 1 ? 0 : colsInRow === 2 ? 24 : 38;
+    const startLeft = 48 - rowWidth / 2;
+
+    for (let col = 0; col < colsInRow && placed < count; col++) {
+      const step = colsInRow === 1 ? 0 : rowWidth / (colsInRow - 1);
+      const left = startLeft + col * step + (rng() - 0.5) * 3;
+      const top = 72 - row * 11 + rng() * 1.2;
+      const rot = (rng() - 0.5) * 28;
+      positions.push({ left, top, rot });
+      placed += 1;
+    }
+
+    row += 1;
+  }
+
+  return positions;
+}
+
+function centeredJarOffset(index: number, activeIndex: number, total: number) {
+  if (total <= 0) {
+    return 0;
+  }
+
+  let offset = index - activeIndex;
+  const half = total / 2;
+
+  if (offset > half) {
+    offset -= total;
+  } else if (offset < -half) {
+    offset += total;
+  }
+
+  return offset;
+}
+
+function ScreenshotCard({
+  screenshot,
+  messages,
+  onReply,
+  userName,
+}: {
+  screenshot: WeeklyScreenshot;
+  messages: string[];
+  onReply: (text: string) => void;
+  userName: string;
+}) {
+  const [draft, setDraft] = useState("");
+  const primaryAudioClass = screenshot.audioClasses[0];
+
+  function send() {
+    const text = draft.trim();
+    if (!text) return;
+    onReply(text);
+    setDraft("");
+  }
+
+  return (
+    <article className="relative pt-4">
+      {/* meta row — tiny age + tiny candy chip row */}
+      <header className="mb-2 flex items-center justify-between">
+        <span className="echo-eyebrow">{formatAge(screenshot.ageHours)} ago</span>
+        {primaryAudioClass ? <CandyShape audioClass={primaryAudioClass} size={14} /> : null}
+      </header>
+
+      {/* caption — generous size, generous leading */}
+      <p
+        className="mb-4 text-[15px] leading-[1.55] text-[var(--ink)]"
+        style={{ fontWeight: 500 }}
+      >
+        {screenshot.caption}
+      </p>
+
+      {/* screenshot — minimal thin border */}
+      <div
+        className="relative overflow-hidden rounded-md"
+        style={{
+          aspectRatio: "16 / 11",
+          border: "1px solid var(--rule)",
+        }}
+      >
+        <WorkScreenshot tone={screenshot.screenshotTone} url={screenshot.screenshotUrl} />
+      </div>
+
+      {/* messages — dash-prefixed prose, never bubbles */}
+      {messages.length > 0 ? (
+        <div className="mt-5 flex flex-col gap-2">
+          {messages.map((message, i) => {
+            const isYou = message.startsWith("You:");
+            const author = isYou ? "You" : (message.split(":")[0] ?? "—").trim();
+            const body = (isYou ? message.slice(4) : message.slice(author.length + 1)).trim();
+            return (
+              <p
+                key={`${screenshot.id}-msg-${i}`}
+                className="text-[13.5px] leading-[1.55]"
+                style={{ color: "var(--ink)", fontWeight: 500 }}
+              >
+                <span
+                  className="mr-1.5 text-[12px]"
+                  style={{
+                    color: isYou ? "var(--ribbon)" : "var(--ink-muted)",
+                    fontWeight: 700,
+                  }}
+                >
+                  — {author}
+                </span>
+                {body}
+              </p>
+            );
+          })}
+        </div>
+      ) : null}
+
+      {/* reply — minimal line, no boxes */}
+      <div className="mt-5 flex items-center gap-3 pb-2">
+        <MessageCircle aria-hidden className="size-3.5 shrink-0 text-[var(--ink-soft)]" />
+        <input
+          className="flex-1 bg-transparent text-[14px] font-medium text-[var(--ink)] outline-none placeholder:text-[var(--ink-soft)]"
+          style={{ borderBottom: "1px solid var(--rule)", paddingBottom: 6 }}
+          value={draft}
+          placeholder={`reply to ${userName}…`}
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              send();
+            }
+          }}
+        />
+        <button
+          className="echo-press grid size-8 shrink-0 place-items-center rounded-full disabled:opacity-25"
+          type="button"
+          onClick={send}
+          disabled={!draft.trim()}
+          aria-label="Send"
+          style={{
+            background: draft.trim() ? "var(--ribbon)" : "transparent",
+            color: draft.trim() ? "#fff" : "var(--ink-soft)",
+            border: draft.trim() ? "none" : "1px solid var(--rule)",
+          }}
+        >
+          <Send aria-hidden className="size-3.5" />
+        </button>
+      </div>
+    </article>
   );
 }
 
@@ -391,53 +627,70 @@ function JarPreview({
   active,
   onSelect,
   user,
-  weeklyCount,
 }: {
   active: boolean;
   onSelect: () => void;
   user: JarUser;
-  weeklyCount: number;
 }) {
+  // seeded micro-tilt — each bag leans a touch
+  const tilt = ((hashString(user.id) % 800) / 800 - 0.5) * 5; // ±2.5°
+  const slice = user.weeklyScreenshots
+    .filter((screenshot) => screenshot.ageHours <= WEEKLY_FEED_HOURS)
+    .map((screenshot) => screenshot.audioClasses[0])
+    .filter((audioClass): audioClass is CandyAudioClass => Boolean(audioClass))
+    .slice(0, 8);
+  const positions = packedCandyPositions(user.id, slice.length);
   return (
     <button
-      className="grid min-w-[118px] snap-center justify-items-center gap-2 text-center"
+      className={`echo-press grid w-[70px] justify-items-center gap-2 text-center transition-opacity duration-300 ${
+        active ? "opacity-100" : "opacity-[0.35]"
+      }`}
       type="button"
+      data-user-id={user.id}
       onClick={onSelect}
       aria-pressed={active}
     >
       <span
-        className={`relative h-[74px] w-[106px] overflow-hidden rounded-b-[30px] rounded-t-lg border transition ${
-          active ? "border-black bg-[#fffaf0] shadow-[0_12px_26px_rgba(23,20,18,.16)]" : "border-black/10 bg-white/58"
-        }`}
+        className="relative transition-transform duration-300"
+        style={{ transform: `rotate(${active ? 0 : tilt}deg) scale(${active ? 1.04 : 1})` }}
       >
-        <span
-          className="absolute right-2 top-2 z-20 size-3 rounded-full border-2 border-[#fbf4e6]"
-          style={{ background: user.online ? "#2da66f" : "#9f988e" }}
-        />
-        <span className="absolute inset-x-2 bottom-2 top-3 rounded-b-[24px] rounded-t-md border border-black/14 bg-[#e9fbff]/72" />
-        <span className="absolute inset-x-3 top-3 h-5 rounded-[50%] border border-black/10 bg-white/45" />
-        <span className="absolute inset-x-4 bottom-3 h-5 rounded-[50%] bg-black/5" />
-        <span className="absolute inset-0">
-          {user.jar.slice(0, 4).map((audioClass, index) => (
-            <span
-              key={`${user.id}-${audioClass}-${index}`}
-              className="absolute"
-              style={{
-                left: `${16 + ((index * 20) % 55)}%`,
-                bottom: `${10 + (index % 2) * 18}px`,
-                transform: `rotate(${index * 9 - 12}deg)`,
-              }}
-            >
-              <CandyShape audioClass={audioClass} size={24} wrapped={index === 0} />
-            </span>
-          ))}
-        </span>
+        <Bag width={68} height={92} active={active}>
+          {slice.map((audioClass, index) => {
+            const p = positions[index];
+            return (
+              <span
+                key={`${user.id}-${audioClass}-${index}`}
+                className="absolute"
+                style={{
+                  left: `${Math.min(75, Math.max(5, p.left))}%`,
+                  top: `${p.top}%`,
+                  transform: `rotate(${p.rot * 0.5}deg)`,
+                }}
+              >
+                <CandyShape audioClass={audioClass} size={13} />
+              </span>
+            );
+          })}
+        </Bag>
+        {/* tiny activity dot — sits just outside the bag */}
+        {user.online ? (
+          <span
+            className="absolute right-0 top-1 z-[3] size-1.5 rounded-full"
+            style={{ background: "var(--ribbon)" }}
+          />
+        ) : null}
       </span>
+
+      {/* name — minimal type */}
       <span className="grid w-full gap-0.5">
-        <span className={`truncate text-xs font-black ${active ? "text-[#171412]" : "text-[#62594e]"}`}>
+        <span
+          className={`truncate text-[13px] leading-none ${
+            active ? "text-[var(--ink)]" : "text-[var(--ink-muted)]"
+          }`}
+          style={{ fontWeight: active ? 700 : 500 }}
+        >
           {user.name}
         </span>
-        <span className="text-[11px] font-black text-[#8f877d]">本週 {weeklyCount}</span>
       </span>
     </button>
   );
@@ -445,8 +698,10 @@ function JarPreview({
 
 export default function MobileAppPrototype() {
   const [activeId, setActiveId] = useState(MOBILE_USERS[0].id);
-  const [activeScreenshotIndex, setActiveScreenshotIndex] = useState(0);
-  const [draft, setDraft] = useState("");
+  const jarDragStartXRef = useRef<number | null>(null);
+  const jarDragDeltaRef = useRef(0);
+  const jarWheelTimestampRef = useRef(0);
+  const [jarDragDelta, setJarDragDelta] = useState(0);
   const profile = useStoredProfile();
   const weeklyFeed = useWeeklyFeed();
   const [nameDraft, setNameDraft] = useState("");
@@ -477,11 +732,64 @@ export default function MobileAppPrototype() {
     () => users.find((user) => user.id === activeId) ?? users[0],
     [activeId, users],
   );
+  const activeIndex = Math.max(0, users.findIndex((user) => user.id === activeUser.id));
   const activeWeeklyScreenshots = useMemo(() => weeklyScreenshotsFor(activeUser), [activeUser]);
-  const activeScreenshot = activeWeeklyScreenshots.length
-    ? activeWeeklyScreenshots[activeScreenshotIndex % activeWeeklyScreenshots.length]
-    : null;
-  const activeMessages = activeScreenshot ? (messages[activeScreenshot.id] ?? activeScreenshot.messages ?? []) : [];
+  const jarDragPreviewDelta = Math.max(-JAR_SLOT_WIDTH * 0.72, Math.min(JAR_SLOT_WIDTH * 0.72, jarDragDelta));
+
+  function focusJarByIndex(nextIndex: number) {
+    const clampedIndex = Math.min(users.length - 1, Math.max(0, nextIndex));
+    const nextUser = users[clampedIndex];
+    if (nextUser) {
+      setActiveId(nextUser.id);
+    }
+  }
+
+  function beginJarDrag(event: PointerEvent<HTMLDivElement>) {
+    event.preventDefault();
+    jarDragStartXRef.current = event.clientX;
+    jarDragDeltaRef.current = 0;
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function updateJarDrag(event: PointerEvent<HTMLDivElement>) {
+    if (jarDragStartXRef.current === null) return;
+    event.preventDefault();
+    const delta = event.clientX - jarDragStartXRef.current;
+    jarDragDeltaRef.current = delta;
+    setJarDragDelta(delta);
+  }
+
+  function endJarDrag() {
+    if (jarDragStartXRef.current === null) return;
+    const delta = jarDragDeltaRef.current;
+    const threshold = 34;
+
+    if (delta < -threshold) {
+      focusJarByIndex(activeIndex + 1);
+    } else if (delta > threshold) {
+      focusJarByIndex(activeIndex - 1);
+    }
+
+    jarDragStartXRef.current = null;
+    jarDragDeltaRef.current = 0;
+    setJarDragDelta(0);
+  }
+
+  function handleJarWheel(event: WheelEvent<HTMLDivElement>) {
+    if (Math.abs(event.deltaX) <= Math.abs(event.deltaY)) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const now = Date.now();
+    if (now - jarWheelTimestampRef.current < 360) {
+      return;
+    }
+
+    jarWheelTimestampRef.current = now;
+    focusJarByIndex(activeIndex + (event.deltaX > 0 ? 1 : -1));
+  }
 
   function saveProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -501,22 +809,11 @@ export default function MobileAppPrototype() {
     emitStoredProfileChange();
   }
 
-  function sendMessage() {
-    const text = draft.trim();
-
-    if (!text) {
-      return;
-    }
-
-    if (!activeScreenshot) {
-      return;
-    }
-
+  function addMessage(screenshotId: string, text: string) {
     setMessages((current) => ({
       ...current,
-      [activeScreenshot.id]: [...(current[activeScreenshot.id] ?? []), `You: ${text}`],
+      [screenshotId]: [...(current[screenshotId] ?? []), `You: ${text}`],
     }));
-    setDraft("");
   }
 
   async function handleEnablePush() {
@@ -530,184 +827,190 @@ export default function MobileAppPrototype() {
   }
 
   return (
-    <main className="min-h-screen bg-[#171412] text-[#171412]">
-      <section className="mx-auto flex h-[100svh] min-h-[720px] w-full max-w-[480px] flex-col overflow-hidden bg-[#f6f1e7]">
-        <header className="flex h-14 shrink-0 items-center justify-between border-b border-black/10 bg-[#fffaf0] px-4">
+    <main className="echo-mobile-app min-h-screen bg-[var(--paper)] text-[var(--ink)]">
+      <section className="mx-auto flex h-[100svh] min-h-[720px] w-full max-w-[480px] flex-col overflow-hidden bg-[var(--paper)]">
+        {/* ══════════════ minimal top bar ══════════════ */}
+        <header className="flex h-12 shrink-0 items-center justify-between px-5">
           <Link
-            className="grid size-9 place-items-center rounded-md border border-black/10 bg-white/60"
+            className="echo-press grid size-8 place-items-center"
             href="/desktop"
             aria-label="Desktop app downloads"
+            style={{ color: "var(--ink-muted)" }}
           >
             <MonitorDown aria-hidden className="size-4" />
           </Link>
-          <h1 className="text-base font-black">Echo</h1>
-          <div className="flex gap-2">
+          <h1 className="text-[14px] font-semibold tracking-tight text-[var(--ink)]">
+            echo
+          </h1>
+          <div className="flex gap-1">
             <button
-              className={`grid size-9 place-items-center rounded-md border border-black/10 bg-white/60 ${
-                pushStatus === "ready" ? "text-[#2da66f]" : pushStatus === "error" ? "text-[#ef6f7f]" : ""
-              }`}
+              className="echo-press grid size-8 place-items-center"
               type="button"
               onClick={handleEnablePush}
               aria-label="Enable notifications"
               title={pushStatus === "ready" ? "Notifications ready" : "Enable notifications"}
               disabled={pushStatus === "loading"}
+              style={{
+                color:
+                  pushStatus === "ready"
+                    ? "var(--ribbon)"
+                    : pushStatus === "error"
+                      ? "var(--ribbon)"
+                      : "var(--ink-muted)",
+              }}
             >
               <Bell aria-hidden className="size-4" />
             </button>
             <Link
-              className="grid size-9 place-items-center rounded-md border border-black/10 bg-white/60"
+              className="echo-press grid size-8 place-items-center"
               href="/mobile/data"
               aria-label="Open data page"
+              style={{ color: "var(--ink-muted)" }}
             >
               <BarChart3 aria-hidden className="size-4" />
             </Link>
           </div>
         </header>
 
-        <section className="h-[28svh] min-h-[170px] shrink-0 border-b border-black/10 bg-[#fbf4e6] px-4 py-4">
-          <div className="flex h-full snap-x gap-4 overflow-x-auto pb-2">
-            {users.map((user) => (
-              <JarPreview
-                key={user.id}
-                user={user}
-                weeklyCount={weeklyScreenshotsFor(user).length}
-                active={user.id === activeUser.id}
-                onSelect={() => {
-                  setActiveId(user.id);
-                  setActiveScreenshotIndex(0);
-                }}
-              />
-            ))}
+        {/* ══════════════ POSTER HERO — bags on the shelf ══════════════ */}
+        <section className="shrink-0 overflow-hidden px-5 pb-2 pt-3">
+          <div
+            className="echo-jar-carousel relative h-[126px] overflow-clip touch-pan-y select-none"
+            onPointerDown={beginJarDrag}
+            onPointerMove={updateJarDrag}
+            onPointerUp={endJarDrag}
+            onPointerCancel={endJarDrag}
+            onWheel={handleJarWheel}
+            onDragStart={(event) => event.preventDefault()}
+          >
+            {users.map((user, i) => {
+              const offset = centeredJarOffset(i, activeIndex, users.length);
+              const isVisible = Math.abs(offset) <= 2;
+
+              return (
+                <div
+                  key={user.id}
+                  className="echo-rise absolute left-1/2 top-1 transition-transform duration-300 ease-out"
+                  style={
+                    {
+                      ["--i" as keyof React.CSSProperties as string]: Math.abs(offset),
+                      pointerEvents: isVisible ? "auto" : "none",
+                      transform: `translateX(calc(-50% + ${offset * JAR_SLOT_WIDTH + jarDragPreviewDelta}px))`,
+                      visibility: isVisible ? "visible" : "hidden",
+                    } as React.CSSProperties
+                  }
+                >
+                  <JarPreview
+                    user={user}
+                    active={user.id === activeUser.id}
+                    onSelect={() => focusJarByIndex(i)}
+                  />
+                </div>
+              );
+            })}
           </div>
         </section>
 
-        <section className="flex min-h-0 flex-1 flex-col bg-[#f6f1e7]">
-          <div className="flex items-center justify-between px-4 py-3">
-            <div className="flex min-w-0 items-center gap-3">
-              <span
-                className="grid size-10 shrink-0 place-items-center rounded-full text-sm font-black text-[#fff7e6]"
-                style={{ background: activeUser.accent }}
-              >
-                {activeUser.name.slice(0, 1)}
-              </span>
-              <div className="min-w-0">
-                <p className="truncate font-black">{activeUser.name}</p>
-                <p className="truncate text-xs font-semibold text-[#62594e]">
-                  {activeScreenshot ? activeScreenshot.caption : activeUser.caption}
-                </p>
-              </div>
+        {/* ══════════════ ACTIVE BAG — minimal title row ══════════════ */}
+        <section className="relative flex min-h-0 flex-1 flex-col">
+          <div className="flex shrink-0 items-center px-5 pb-3 pt-4">
+            <div className="min-w-0">
+              <p className="text-[11px] font-medium text-[var(--ink-soft)]">
+                {activeUser.online ? "online · just now" : "offline"}
+              </p>
+              <h3 className="truncate text-[20px] font-semibold leading-tight tracking-tight text-[var(--ink)]">
+                {activeUser.name}
+                <span className="text-[var(--ink-soft)]"> ’s candy</span>
+              </h3>
             </div>
-            <button className="grid size-9 shrink-0 place-items-center rounded-md border border-black/10 bg-white/60" type="button" aria-label="Reply with camera">
-              <Camera aria-hidden className="size-4" />
-            </button>
           </div>
 
-          <div className="min-h-[280px] flex-1 px-4">
-            {activeScreenshot ? (
-              <div className="grid h-full min-h-0 grid-rows-[auto_1fr] gap-2">
-                <div className="flex items-center justify-between text-xs font-black text-[#62594e]">
-                  <span>{formatAge(activeScreenshot.ageHours)} ago</span>
-                  <span>
-                    {activeScreenshotIndex + 1}/{activeWeeklyScreenshots.length}
-                  </span>
-                </div>
-                <WorkScreenshot tone={activeScreenshot.screenshotTone} url={activeScreenshot.screenshotUrl} />
+          {/* ══════ Waterfall of screenshots — generous breathing room ══════ */}
+          <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-6">
+            {activeWeeklyScreenshots.length > 0 ? (
+              <div className="flex flex-col">
+                {activeWeeklyScreenshots.map((screenshot, i) => (
+                  <div
+                    key={screenshot.id}
+                    className="echo-rise border-t border-[var(--rule)] pb-3"
+                    style={{ ["--i" as keyof React.CSSProperties as string]: i } as React.CSSProperties}
+                  >
+                    <ScreenshotCard
+                      screenshot={screenshot}
+                      messages={messages[screenshot.id] ?? screenshot.messages ?? []}
+                      onReply={(text) => addMessage(screenshot.id, text)}
+                      userName={activeUser.name}
+                    />
+                  </div>
+                ))}
               </div>
             ) : (
-              <div className="grid h-full place-items-center rounded-lg border border-dashed border-black/18 bg-[#fffaf0] px-6 text-center">
-                <p className="text-sm font-black leading-6 text-[#62594e]">本週還沒有包裝截圖。</p>
+              <div className="grid h-full place-items-center px-6 text-center">
+                <div className="grid gap-4 justify-items-center">
+                  <Bag width={88} height={110}>
+                    <span className="absolute inset-0 grid place-items-center opacity-40">
+                      <CandyShape audioClass={activeUser.jar[0] ?? "Speech"} size={20} />
+                    </span>
+                  </Bag>
+                  <p className="text-[14px] font-medium leading-snug text-[var(--ink-muted)]">
+                    nothing in the bag yet
+                    <br />
+                    <span className="text-[var(--ink-soft)]">本週還沒有包裝截圖</span>
+                  </p>
+                </div>
               </div>
             )}
-          </div>
-
-          <div className="shrink-0 px-4 pb-4 pt-3">
-            {activeWeeklyScreenshots.length > 1 ? (
-              <div className="mb-3 grid grid-cols-2 gap-2">
-                <button
-                  className="h-9 rounded-md border border-black/10 bg-[#fffaf0] text-xs font-black"
-                  type="button"
-                  onClick={() =>
-                    setActiveScreenshotIndex((current) =>
-                      current === 0 ? activeWeeklyScreenshots.length - 1 : current - 1,
-                    )
-                  }
-                >
-                  上一張
-                </button>
-                <button
-                  className="h-9 rounded-md border border-black/10 bg-[#fffaf0] text-xs font-black"
-                  type="button"
-                  onClick={() => setActiveScreenshotIndex((current) => (current + 1) % activeWeeklyScreenshots.length)}
-                >
-                  下一張
-                </button>
-              </div>
-            ) : null}
-            <div className="mb-3 flex max-h-20 flex-col gap-2 overflow-auto">
-              {activeMessages.length ? (
-                activeMessages.slice(-2).map((message, index) => (
-                  <p key={`${activeUser.id}-message-${index}`} className="rounded-md bg-[#fffaf0] px-3 py-2 text-sm font-semibold">
-                    {message}
-                  </p>
-                ))
-              ) : (
-                <p className="rounded-md border border-dashed border-black/18 px-3 py-2 text-sm font-semibold text-[#62594e]">
-                  還沒有人回覆。
-                </p>
-              )}
-            </div>
-
-            <div className="flex gap-2">
-              <div className="relative flex-1">
-                <MessageCircle aria-hidden className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#62594e]" />
-                <input
-                  className="h-11 w-full rounded-md border border-black/12 bg-[#fffaf0] pl-10 pr-3 text-sm font-semibold outline-none focus:border-black/50"
-                  value={draft}
-                  placeholder={activeScreenshot ? `回覆 ${activeUser.name}` : "等待本週截圖"}
-                  onChange={(event) => setDraft(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      sendMessage();
-                    }
-                  }}
-                />
-              </div>
-              <button
-                className="grid size-11 shrink-0 place-items-center rounded-md bg-[#171412] text-[#fff7e6] disabled:opacity-40"
-                type="button"
-                onClick={sendMessage}
-                disabled={!activeScreenshot}
-                aria-label="Send"
-              >
-                <Send aria-hidden className="size-4" />
-              </button>
-            </div>
           </div>
         </section>
       </section>
 
       {!profile ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-[#171412]/78 px-5 backdrop-blur-sm">
-          <form className="w-full max-w-[340px] rounded-lg bg-[#fffaf0] p-5 shadow-[0_24px_80px_rgba(0,0,0,.32)]" onSubmit={saveProfile}>
-            <p className="text-xs font-black uppercase tracking-[0.08em] text-[#62594e]">Echo onboarding</p>
-            <h2 className="mt-2 text-2xl font-black">你的糖果罐名稱</h2>
-            <p className="mt-2 text-sm font-semibold leading-6 text-[#62594e]">
-              手機和桌面端輸入同一個名稱，就會使用同一個 User_ID 寫入 Notion。
+        <div
+          className="fixed inset-0 z-50 grid place-items-center px-5"
+          style={{ background: "rgba(28,25,22,.42)", backdropFilter: "blur(6px)" }}
+        >
+          <form
+            className="w-full max-w-[340px] rounded-2xl bg-[var(--paper)] px-6 py-7 text-center"
+            style={{ border: "1px solid var(--rule)" }}
+            onSubmit={saveProfile}
+          >
+            <div className="mb-5 flex justify-center">
+              <Bag width={80} height={100}>
+                <span className="absolute inset-0 grid place-items-center">
+                  <CandyShape audioClass="Speech" size={22} />
+                </span>
+              </Bag>
+            </div>
+            <h2 className="text-[22px] font-semibold leading-tight tracking-tight text-[var(--ink)]">
+              name your{" "}
+              <span className="echo-underline font-display italic">bag</span>?
+            </h2>
+            <p className="mt-3 text-[12.5px] leading-[1.55] text-[var(--ink-muted)]">
+              手機與桌面端使用同一名稱，便會以同一個 User_ID 寫入 Notion。
             </p>
             <input
-              className="mt-5 h-12 w-full rounded-md border border-black/12 bg-white px-3 text-base font-black outline-none focus:border-black/55"
+              className="mt-5 h-10 w-full bg-transparent text-center text-[16px] font-medium outline-none"
+              style={{
+                color: "var(--ink)",
+                borderBottom: "1px solid var(--rule)",
+              }}
               value={nameDraft}
-              placeholder="例如 Yuhsiang"
+              placeholder="Yuhsiang"
               autoFocus
               onChange={(event) => setNameDraft(event.target.value)}
             />
             {nameDraft.trim() ? (
-              <p className="mt-3 truncate rounded-md bg-[#f6f1e7] px-3 py-2 text-xs font-bold text-[#62594e]">
-                User_ID: {userIdFromName(nameDraft)}
+              <p className="mt-3 text-[10px] font-medium tracking-wide text-[var(--ink-soft)]">
+                id · {userIdFromName(nameDraft)}
               </p>
             ) : null}
-            <button className="mt-5 h-12 w-full rounded-md bg-[#171412] text-sm font-black text-[#fff7e6]" type="submit">
-              開始使用
+            <button
+              className="echo-press mt-5 inline-flex h-10 items-center justify-center gap-2 rounded-full px-6 text-[13px] font-semibold"
+              style={{ background: "var(--ribbon)", color: "#fff" }}
+              type="submit"
+            >
+              begin
+              <span aria-hidden>→</span>
             </button>
           </form>
         </div>

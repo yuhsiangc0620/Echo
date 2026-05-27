@@ -27,7 +27,7 @@ export const MOBILE_USERS: JarUser[] = [
     name: "You",
     handle: "local jar",
     online: true,
-    accent: "#ef6f7f",
+    accent: "#ff8aa6",
     jar: ["Keyboard_heavy", "Mouse_click", "Speech", "Air_conditioner"],
     caption: "本週還留著的工作截圖。",
     weeklyScreenshots: [
@@ -54,7 +54,7 @@ export const MOBILE_USERS: JarUser[] = [
     name: "Mika",
     handle: "design desk",
     online: true,
-    accent: "#65c7df",
+    accent: "#92c8f3",
     jar: ["Sigh", "Music", "Speech", "Door_knock"],
     caption: "剛包了一顆雲朵軟糖。",
     weeklyScreenshots: [
@@ -73,7 +73,7 @@ export const MOBILE_USERS: JarUser[] = [
     name: "Ren",
     handle: "ops corner",
     online: false,
-    accent: "#7cd7b8",
+    accent: "#88e0b0",
     jar: ["Mouse_click", "Traffic", "Keyboard_heavy"],
     caption: "滑鼠連擊累積中，手機通知待讀。",
     weeklyScreenshots: [
@@ -100,7 +100,7 @@ export const MOBILE_USERS: JarUser[] = [
     name: "Jia",
     handle: "night shift",
     online: true,
-    accent: "#f5b642",
+    accent: "#ffc878",
     jar: ["Music", "Air_conditioner", "Keyboard_heavy", "Sigh"],
     caption: "背景音樂很多，但還沒有觸發工作糖。",
     weeklyScreenshots: [],
