@@ -3,11 +3,32 @@ const path = require("node:path");
 const { app, BrowserWindow, desktopCapturer, globalShortcut, ipcMain, screen } = require("electron");
 
 let overlayWindow;
+let interactiveTimer;
 
 function wait(ms) {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
+}
+
+function setOverlayInteractive(enabled) {
+  if (!overlayWindow || overlayWindow.isDestroyed()) {
+    return;
+  }
+
+  if (interactiveTimer) {
+    clearTimeout(interactiveTimer);
+    interactiveTimer = undefined;
+  }
+
+  overlayWindow.setFocusable(Boolean(enabled));
+  overlayWindow.setIgnoreMouseEvents(!enabled, { forward: true });
+
+  if (enabled) {
+    interactiveTimer = setTimeout(() => {
+      setOverlayInteractive(false);
+    }, 8000);
+  }
 }
 
 app.whenReady().then(() => {
@@ -49,15 +70,12 @@ function createOverlayWindow() {
 
   overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   overlayWindow.setAlwaysOnTop(true, "screen-saver");
-  overlayWindow.setIgnoreMouseEvents(true, { forward: true });
+  setOverlayInteractive(false);
   overlayWindow.loadFile(path.join(__dirname, "overlay.html"));
 
   overlayWindow.once("ready-to-show", () => {
     overlayWindow.showInactive();
-    overlayWindow.webContents.send("echo:drop", {
-      audioClass: "Keyboard_heavy",
-      wrapped: false,
-    });
+    setOverlayInteractive(false);
   });
 }
 
@@ -67,6 +85,11 @@ app.whenReady().then(() => {
   globalShortcut.register("CommandOrControl+Alt+E", () => {
     overlayWindow?.webContents.send("echo:drop", {
       audioClass: "Keyboard_heavy",
+      audioClasses: ["Keyboard_heavy", "Speech"],
+      soundMix: [
+        { audioClass: "Keyboard_heavy", weight: 0.62 },
+        { audioClass: "Speech", weight: 0.38 },
+      ],
       wrapped: false,
     });
   });
@@ -74,6 +97,11 @@ app.whenReady().then(() => {
   globalShortcut.register("CommandOrControl+Alt+W", () => {
     overlayWindow?.webContents.send("echo:drop", {
       audioClass: "Sigh",
+      audioClasses: ["Sigh", "Music"],
+      soundMix: [
+        { audioClass: "Sigh", weight: 0.72 },
+        { audioClass: "Music", weight: 0.28 },
+      ],
       wrapped: true,
     });
   });
@@ -92,13 +120,11 @@ app.whenReady().then(() => {
 });
 
 ipcMain.on("echo:interactive", (_event, enabled) => {
-  overlayWindow?.setFocusable(Boolean(enabled));
-  overlayWindow?.setIgnoreMouseEvents(!enabled, { forward: true });
+  setOverlayInteractive(Boolean(enabled));
 });
 
 ipcMain.on("echo:focus", () => {
-  overlayWindow?.setFocusable(true);
-  overlayWindow?.setIgnoreMouseEvents(false, { forward: true });
+  setOverlayInteractive(true);
   overlayWindow?.show();
   overlayWindow?.focus();
 });
@@ -134,6 +160,7 @@ ipcMain.handle("echo:capture-screen", async () => {
   } finally {
     overlayWindow?.showInactive();
     overlayWindow?.setAlwaysOnTop(true, "screen-saver");
+    setOverlayInteractive(false);
   }
 });
 
