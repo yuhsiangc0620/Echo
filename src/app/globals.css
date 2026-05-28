@@ -112,19 +112,6 @@ button:disabled {
   background: transparent;
 }
 
-.echo-mobile-app,
-.echo-mobile-app * {
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-
-.echo-mobile-app::-webkit-scrollbar,
-.echo-mobile-app *::-webkit-scrollbar {
-  width: 0 !important;
-  height: 0 !important;
-  display: none !important;
-}
-
 .echo-jar-carousel,
 .echo-jar-carousel * {
   -webkit-user-select: none;

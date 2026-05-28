@@ -17,7 +17,6 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
-  type WheelEvent,
 } from "react";
 import CandyShape from "@/app/_components/candy-shape";
 import { AUDIO_CLASSES, type CandyAudioClass } from "@/lib/candy/catalog";
@@ -30,7 +29,6 @@ type EchoProfile = {
 
 const PROFILE_STORAGE_KEY = "echo.profile.v1";
 const WEEKLY_FEED_HOURS = 24 * 7;
-const JAR_SLOT_WIDTH = 86;
 const EMPTY_WEEKLY_FEED_SNAPSHOT: WeeklyFeedSnapshot = {
   status: "idle",
   items: [],
@@ -495,23 +493,6 @@ function packedCandyPositions(seed: string, count: number) {
   return positions;
 }
 
-function centeredJarOffset(index: number, activeIndex: number, total: number) {
-  if (total <= 0) {
-    return 0;
-  }
-
-  let offset = index - activeIndex;
-  const half = total / 2;
-
-  if (offset > half) {
-    offset -= total;
-  } else if (offset < -half) {
-    offset += total;
-  }
-
-  return offset;
-}
-
 function ScreenshotCard({
   screenshot,
   messages,
@@ -642,7 +623,7 @@ function JarPreview({
   const positions = packedCandyPositions(user.id, slice.length);
   return (
     <button
-      className={`echo-press grid w-[70px] justify-items-center gap-2 text-center transition-opacity duration-300 ${
+      className={`echo-press grid min-w-[78px] snap-center justify-items-center gap-2 text-center transition-opacity duration-300 ${
         active ? "opacity-100" : "opacity-[0.35]"
       }`}
       type="button"
@@ -654,7 +635,7 @@ function JarPreview({
         className="relative transition-transform duration-300"
         style={{ transform: `rotate(${active ? 0 : tilt}deg) scale(${active ? 1.04 : 1})` }}
       >
-        <Bag width={68} height={92} active={active}>
+        <Bag width={74} height={96} active={active}>
           {slice.map((audioClass, index) => {
             const p = positions[index];
             return (
@@ -700,7 +681,6 @@ export default function MobileAppPrototype() {
   const [activeId, setActiveId] = useState(MOBILE_USERS[0].id);
   const jarDragStartXRef = useRef<number | null>(null);
   const jarDragDeltaRef = useRef(0);
-  const jarWheelTimestampRef = useRef(0);
   const [jarDragDelta, setJarDragDelta] = useState(0);
   const profile = useStoredProfile();
   const weeklyFeed = useWeeklyFeed();
@@ -734,7 +714,6 @@ export default function MobileAppPrototype() {
   );
   const activeIndex = Math.max(0, users.findIndex((user) => user.id === activeUser.id));
   const activeWeeklyScreenshots = useMemo(() => weeklyScreenshotsFor(activeUser), [activeUser]);
-  const jarDragPreviewDelta = Math.max(-JAR_SLOT_WIDTH * 0.72, Math.min(JAR_SLOT_WIDTH * 0.72, jarDragDelta));
 
   function focusJarByIndex(nextIndex: number) {
     const clampedIndex = Math.min(users.length - 1, Math.max(0, nextIndex));
@@ -775,22 +754,6 @@ export default function MobileAppPrototype() {
     setJarDragDelta(0);
   }
 
-  function handleJarWheel(event: WheelEvent<HTMLDivElement>) {
-    if (Math.abs(event.deltaX) <= Math.abs(event.deltaY)) {
-      return;
-    }
-
-    event.preventDefault();
-
-    const now = Date.now();
-    if (now - jarWheelTimestampRef.current < 360) {
-      return;
-    }
-
-    jarWheelTimestampRef.current = now;
-    focusJarByIndex(activeIndex + (event.deltaX > 0 ? 1 : -1));
-  }
-
   function saveProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -827,7 +790,7 @@ export default function MobileAppPrototype() {
   }
 
   return (
-    <main className="echo-mobile-app min-h-screen bg-[var(--paper)] text-[var(--ink)]">
+    <main className="min-h-screen bg-[var(--paper)] text-[var(--ink)]">
       <section className="mx-auto flex h-[100svh] min-h-[720px] w-full max-w-[480px] flex-col overflow-hidden bg-[var(--paper)]">
         {/* ══════════════ minimal top bar ══════════════ */}
         <header className="flex h-12 shrink-0 items-center justify-between px-5">
@@ -880,25 +843,19 @@ export default function MobileAppPrototype() {
             onPointerMove={updateJarDrag}
             onPointerUp={endJarDrag}
             onPointerCancel={endJarDrag}
-            onWheel={handleJarWheel}
             onDragStart={(event) => event.preventDefault()}
           >
-            {users.map((user, i) => {
-              const offset = centeredJarOffset(i, activeIndex, users.length);
-              const isVisible = Math.abs(offset) <= 2;
-
-              return (
+            <div
+              className="absolute left-0 top-1 flex gap-2.5 transition-transform duration-300 ease-out"
+              style={{
+                transform: `translateX(calc(50% - 39px - ${activeIndex * 88}px + ${jarDragDelta}px))`,
+              }}
+            >
+              {users.map((user, i) => (
                 <div
                   key={user.id}
-                  className="echo-rise absolute left-1/2 top-1 transition-transform duration-300 ease-out"
-                  style={
-                    {
-                      ["--i" as keyof React.CSSProperties as string]: Math.abs(offset),
-                      pointerEvents: isVisible ? "auto" : "none",
-                      transform: `translateX(calc(-50% + ${offset * JAR_SLOT_WIDTH + jarDragPreviewDelta}px))`,
-                      visibility: isVisible ? "visible" : "hidden",
-                    } as React.CSSProperties
-                  }
+                  className="echo-rise shrink-0"
+                  style={{ ["--i" as keyof React.CSSProperties as string]: i } as React.CSSProperties}
                 >
                   <JarPreview
                     user={user}
@@ -906,8 +863,8 @@ export default function MobileAppPrototype() {
                     onSelect={() => focusJarByIndex(i)}
                   />
                 </div>
-              );
-            })}
+              ))}
+            </div>
           </div>
         </section>
 
