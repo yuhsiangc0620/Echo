@@ -1,115 +1,306 @@
 import { ChevronLeft } from "lucide-react";
 import Link from "next/link";
-import CandyShape from "@/app/_components/candy-shape";
+import CandyShape, { type CandyShapeKind } from "@/app/_components/candy-shape";
 import {
   AUDIO_CLASSES,
   AUDIO_CONFIG,
-  getCandyVariantName,
   type CandyAudioClass,
-  type CandyModifier,
 } from "@/lib/candy/catalog";
-import { MOBILE_USERS } from "@/lib/mobile/mock-data";
-
-const WORK_CLASSES = AUDIO_CLASSES.filter((c) => AUDIO_CONFIG[c].role === "work");
-const AMBIENT_CLASSES = AUDIO_CLASSES.filter((c) => AUDIO_CONFIG[c].role === "ambient");
-const QUIET_CLASSES = AUDIO_CLASSES.filter((c) => AUDIO_CONFIG[c].role === "quiet");
-
-const MODIFIERS: { key: CandyModifier; label: string }[] = [
-  { key: "default", label: "純淨" },
-  { key: "music", label: "音樂" },
-  { key: "speech", label: "人聲" },
-  { key: "cold", label: "冷氣" },
-  { key: "outdoor", label: "戶外" },
-  { key: "quiet", label: "靜謐" },
-];
 
 const PAGE_BG = "var(--paper)";
-const CATALOG_CARD = "rounded-[18px] border border-[var(--rule)] bg-white/60";
-const SOFT_SHADOW = "0 18px 48px rgba(28,25,22,.045)";
 
-function formatThreshold(secs: number) {
-  if (secs < 60) return `${secs}s`;
-  const mins = Math.round(secs / 60);
-  if (mins < 60) return `${mins} 分鐘`;
-  return `${Math.round(mins / 60)} 小時`;
+// Deterministic PRNG so the chart is stable per seed (no hydration drift).
+function hashString(s: string): number {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+function mulberry32(seed: number) {
+  let s = seed >>> 0;
+  return () => {
+    s = (s + 0x6d2b79f5) >>> 0;
+    let t = s;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const f = (n: number) => Math.round(n * 100) / 100;
+
+type SoundMix = { cls: CandyAudioClass; weight: number };
+type Drop = { i: number; shape: CandyShapeKind; tones: SoundMix[] };
+
+function gradientFromSoundMix(tones: SoundMix[]) {
+  let cursor = 0;
+  const stops = tones.flatMap(({ cls, weight }) => {
+    const start = cursor;
+    cursor += weight;
+    const color = AUDIO_CONFIG[cls].color;
+
+    return [`${color} ${f(start * 100)}%`, `${color} ${f(cursor * 100)}%`];
+  });
+
+  return `linear-gradient(180deg, ${stops.join(", ")})`;
 }
 
-function SectionLabel({ title, subtitle }: { title: string; subtitle: string }) {
+function timelineStopsFromDrops(drops: Drop[], pointCount: number) {
+  const sortedDrops = [...drops].sort((a, b) => a.i - b.i);
+
+  if (!sortedDrops.length) {
+    return [];
+  }
+
+  return sortedDrops.flatMap((drop, index) => {
+    const offset = (drop.i / (pointCount - 1)) * 100;
+    const previousOffset = index === 0 ? 0 : (sortedDrops[index - 1].i / (pointCount - 1)) * 100;
+    const nextOffset =
+      index === sortedDrops.length - 1 ? 100 : (sortedDrops[index + 1].i / (pointCount - 1)) * 100;
+    const start = index === 0 ? 0 : (previousOffset + offset) / 2;
+    const end = index === sortedDrops.length - 1 ? 100 : (offset + nextOffset) / 2;
+    const width = end - start;
+    let cursor = start;
+
+    return drop.tones.flatMap(({ cls, weight }) => {
+      const color = AUDIO_CONFIG[cls].color;
+      const stopStart = cursor;
+      cursor += width * weight;
+
+      return [
+        { color, offset: stopStart },
+        { color, offset: cursor },
+      ];
+    });
+  });
+}
+
+function buildActivity(seed: string) {
+  const n = 48;
+  const rand = mulberry32(hashString(seed));
+  const values: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const t = i / (n - 1);
+    const morning = Math.exp(-((t - 0.3) ** 2) * 36) * 0.85;
+    const afternoon = Math.exp(-((t - 0.7) ** 2) * 28) * 0.95;
+    const base = 0.18 + morning + afternoon;
+    const wander = (rand() - 0.5) * 0.16;
+    values.push(Math.max(0.06, Math.min(0.95, base + wander)));
+  }
+  // peaks → candy drops
+  const peaks: { i: number; v: number }[] = [];
+  for (let i = 2; i < n - 2; i++) {
+    if (values[i] > values[i - 1] && values[i] > values[i + 1] && values[i] > 0.55) {
+      peaks.push({ i, v: values[i] });
+    }
+  }
+  peaks.sort((a, b) => b.v - a.v);
+  const dropShapes: CandyShapeKind[] = ["spiky", "donut", "pea", "spiky"];
+  const dropTones: SoundMix[][] = [
+    [
+      { cls: "Keyboard_heavy", weight: 0.55 },
+      { cls: "Speech", weight: 0.3 },
+      { cls: "Air_conditioner", weight: 0.15 },
+    ],
+    [
+      { cls: "Mouse_click", weight: 0.62 },
+      { cls: "Music", weight: 0.25 },
+      { cls: "Speech", weight: 0.13 },
+    ],
+    [
+      { cls: "Sigh", weight: 0.7 },
+      { cls: "Silence", weight: 0.3 },
+    ],
+    [
+      { cls: "Keyboard_heavy", weight: 0.48 },
+      { cls: "Traffic", weight: 0.32 },
+      { cls: "Door_knock", weight: 0.2 },
+    ],
+  ];
+  const drops: Drop[] = peaks.slice(0, 4).map((p, j) => ({
+    i: p.i,
+    shape: dropShapes[j % dropShapes.length],
+    tones: dropTones[j % dropTones.length],
+  }));
+  return { values, drops };
+}
+
+function ActivityChart() {
+  const W = 320;
+  const H = 100;
+  const padX = 8;
+  const padY = 14;
+  const innerW = W - padX * 2;
+  const innerH = H - padY * 2;
+  const baseY = H - padY;
+
+  const { values, drops } = buildActivity("yuhsiang-2026-w22");
+  const n = values.length;
+
+  const xs = values.map((_, i) => padX + (i / (n - 1)) * innerW);
+  const ys = values.map((v) => padY + (1 - v) * innerH);
+
+  let pathD = `M ${f(xs[0])} ${f(ys[0])}`;
+  for (let i = 1; i < n; i++) {
+    const cp1x = xs[i - 1] + (xs[i] - xs[i - 1]) / 3;
+    const cp1y = ys[i - 1];
+    const cp2x = xs[i] - (xs[i] - xs[i - 1]) / 3;
+    const cp2y = ys[i];
+    pathD += ` C ${f(cp1x)} ${f(cp1y)} ${f(cp2x)} ${f(cp2y)} ${f(xs[i])} ${f(ys[i])}`;
+  }
+  const fillD = `${pathD} L ${f(xs[n - 1])} ${f(baseY)} L ${f(xs[0])} ${f(baseY)} Z`;
+
+  // hour ticks at every 4 hours assuming 24h span across n points
+  const hourTicks = [0, 6, 12, 18, 24];
+
+  const toneStops = timelineStopsFromDrops(drops, n);
+
   return (
-    <div className="mb-4">
-      <p className="echo-eyebrow">{title}</p>
-      <p className="mt-1 text-[12px] font-medium leading-snug text-[var(--ink-muted)]">{subtitle}</p>
+    <div>
+      <div className="flex items-baseline justify-between">
+        <p className="echo-eyebrow">today · 工作聲音</p>
+        <p className="text-[10px] font-medium text-[var(--ink-soft)]">
+          {drops.length} 顆糖果掉落
+        </p>
+      </div>
+      <div className="relative mt-3">
+        <svg
+          viewBox={`0 0 ${W} ${H}`}
+          className="block w-full"
+          style={{ aspectRatio: `${W} / ${H}` }}
+          role="img"
+          aria-label="今日工作聲音活動圖"
+        >
+          <defs>
+            <linearGradient id="actToneGrad" x1="0" y1="0" x2="1" y2="0">
+              {toneStops.length ? (
+                <>
+                  <stop offset="0%" stopColor={toneStops[0].color} stopOpacity="0.18" />
+                  {toneStops.map((stop, k) => (
+                    <stop key={k} offset={`${f(stop.offset)}%`} stopColor={stop.color} stopOpacity="0.26" />
+                  ))}
+                  <stop offset="100%" stopColor={toneStops[toneStops.length - 1].color} stopOpacity="0.18" />
+                </>
+              ) : (
+                <stop offset="0%" stopColor="var(--ribbon)" stopOpacity="0.2" />
+              )}
+            </linearGradient>
+            <linearGradient id="actFade" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="white" stopOpacity="1" />
+              <stop offset="100%" stopColor="white" stopOpacity="0" />
+            </linearGradient>
+            <mask id="actFillFade">
+              <path d={fillD} fill="url(#actFade)" />
+            </mask>
+          </defs>
+          <rect x="0" y="0" width={W} height={H} fill="url(#actToneGrad)" mask="url(#actFillFade)" />
+          <path
+            d={pathD}
+            stroke="var(--ink)"
+            strokeWidth="1"
+            fill="none"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            vectorEffect="non-scaling-stroke"
+          />
+          {drops.map(({ i }, k) => (
+            <line
+              key={k}
+              x1={f(xs[i])}
+              y1={f(ys[i])}
+              x2={f(xs[i])}
+              y2={f(baseY)}
+              stroke="var(--ink-soft)"
+              strokeWidth="0.5"
+              strokeDasharray="2 2"
+              opacity="0.34"
+              vectorEffect="non-scaling-stroke"
+            />
+          ))}
+        </svg>
+        {drops.map(({ i, shape, tones }, k) => (
+          <span
+            key={k}
+            className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2"
+            style={{
+              left: `${(xs[i] / W) * 100}%`,
+              top: `${(ys[i] / H) * 100}%`,
+            }}
+          >
+            <CandyShape
+              audioClass={tones[0].cls}
+              gradient={gradientFromSoundMix(tones)}
+              shape={shape}
+              size={11}
+            />
+          </span>
+        ))}
+      </div>
+      <div className="mt-1 flex justify-between px-1 text-[9px] font-medium tracking-wider text-[var(--ink-soft)]">
+        {hourTicks.map((h) => (
+          <span key={h}>{String(h).padStart(2, "0")}</span>
+        ))}
+      </div>
     </div>
   );
 }
 
-function WorkCandyCard({ audioClass }: { audioClass: CandyAudioClass }) {
-  const config = AUDIO_CONFIG[audioClass];
+const SHAPES: { kind: CandyShapeKind; label: string; rep: CandyAudioClass; sample: string; size?: number }[] = [
+  { kind: "circle", label: "圓形", rep: "Speech", sample: "環境聲、靜默", size: 24 },
+  { kind: "pea",    label: "豌豆",  rep: "Sigh",          sample: "長嘆氣" },
+  { kind: "spiky",  label: "河豚",  rep: "Keyboard_heavy", sample: "急躁鍵盤" },
+  { kind: "donut",  label: "甜甜圈", rep: "Mouse_click",   sample: "滑鼠連擊" },
+];
 
+function ShapeIndex() {
   return (
-    <article className={`${CATALOG_CARD} p-4`} style={{ boxShadow: SOFT_SHADOW }}>
-      <div className="mb-4 flex items-center gap-4">
-        <CandyShape audioClass={audioClass} size={76} />
-        <div className="min-w-0">
-          <p className="font-display text-[24px] italic leading-none text-[var(--ink)]">{config.candyName}</p>
-          <p className="mt-1 text-sm font-medium text-[var(--ink-muted)]">{config.label}</p>
-          <div className="mt-1.5 flex flex-wrap gap-1.5">
-            <span className="rounded-full border border-[var(--rule)] px-2 py-0.5 text-[10px] font-semibold text-[var(--ink-muted)]">
-              累積 {formatThreshold(config.thresholdSec)}
-            </span>
-            <span
-              className="rounded-full px-2 py-0.5 text-[10px] font-semibold text-white"
-              style={{
-                background: "var(--ribbon)",
-              }}
-            >
-              觸發掉落
-            </span>
-          </div>
-        </div>
-      </div>
-
-      <div className="mb-2.5 flex items-center gap-1.5">
-        <span className="h-px flex-1 bg-[var(--rule)]" />
-        <p className="echo-eyebrow">音場光譜</p>
-        <span className="h-px flex-1 bg-[var(--rule)]" />
-      </div>
-      <p className="mb-3 text-[11px] font-medium leading-relaxed text-[var(--ink-muted)]">
-        工作期間偵測到的環境聲組合，決定這顆糖的最終外觀
-      </p>
-
-      <div className="grid grid-cols-2 gap-2">
-        {MODIFIERS.map(({ key, label }) => (
-          <div
-            key={key}
-            className="flex flex-col items-center gap-1.5 rounded-[14px] border border-[var(--rule-soft)] bg-[var(--paper)] py-3"
-          >
-            <CandyShape audioClass={audioClass} size={42} modifier={key} />
-            <p className="text-[10px] font-semibold text-[var(--ink)]">{label}</p>
-            <p className="px-1 text-center text-[9px] font-medium leading-tight text-[var(--ink-soft)]">
-              {getCandyVariantName(audioClass, key)}
-            </p>
+    <div>
+      <p className="echo-eyebrow">形狀 · 4 種</p>
+      <div className="mt-3 grid grid-cols-4 gap-2">
+        {SHAPES.map(({ kind, label, rep, sample, size = 44 }) => (
+          <div key={kind} className="flex flex-col items-center gap-1.5 py-2">
+            <div className="grid h-12 place-items-center">
+              <CandyShape audioClass={rep} shape={kind} size={size} />
+            </div>
+            <p className="text-[11px] font-semibold text-[var(--ink)]">{label}</p>
+            <p className="text-center text-[9px] leading-tight text-[var(--ink-soft)]">{sample}</p>
           </div>
         ))}
       </div>
-    </article>
+    </div>
   );
 }
 
-function AmbientCandyCard({ audioClass }: { audioClass: CandyAudioClass }) {
-  const config = AUDIO_CONFIG[audioClass];
-
+function ColorIndex() {
   return (
-    <article className={`${CATALOG_CARD} flex items-center gap-3 p-3`} style={{ boxShadow: SOFT_SHADOW }}>
-      <CandyShape audioClass={audioClass} size={54} />
-      <div className="min-w-0">
-        <p className="truncate font-display text-[18px] italic leading-tight text-[var(--ink)]">{config.candyName}</p>
-        <p className="truncate text-xs font-medium text-[var(--ink-muted)]">{config.label}</p>
-        <span className="mt-1 inline-block rounded-full border border-[var(--rule)] px-2 py-0.5 text-[10px] font-semibold text-[var(--ink-muted)]">
-          環境記錄
-        </span>
-      </div>
-    </article>
+    <div>
+      <p className="echo-eyebrow">聲音顏色 · {AUDIO_CLASSES.length} 種</p>
+      <ul className="mt-3 divide-y divide-[var(--rule)]">
+        {AUDIO_CLASSES.map((cls) => {
+          const config = AUDIO_CONFIG[cls];
+          return (
+            <li key={cls} className="flex items-center gap-3 py-2.5">
+              <span
+                className="size-[18px] shrink-0 rounded-full"
+                style={{
+                  background: config.color,
+                  boxShadow: `0 0 8px ${config.color}`,
+                }}
+                aria-hidden
+              />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[13px] font-semibold text-[var(--ink)]">{config.label}</p>
+                <p className="truncate text-[11px] text-[var(--ink-soft)]">{config.mediapipeCategory}</p>
+              </div>
+              <span className="text-[10px] font-medium tracking-wider text-[var(--ink-soft)] uppercase">
+                {config.short}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 
@@ -117,114 +308,23 @@ export default function MobileDataPage() {
   return (
     <main className="min-h-screen bg-[var(--paper)] text-[var(--ink)]">
       <section className="mx-auto min-h-screen w-full max-w-[480px]" style={{ background: PAGE_BG }}>
-        <header className="relative flex h-14 items-center justify-between border-b border-[var(--rule)] px-4">
-          <span
-            className="absolute inset-x-5 bottom-2 h-[3px]"
-            style={{
-              background:
-                "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 4' preserveAspectRatio='none'><path d='M1 2 Q 25 0 50 2 T 99 2' fill='none' stroke='%23ff1f63' stroke-width='1.2' stroke-linecap='round'/></svg>\") center/100% 100% no-repeat",
-            }}
-          />
+        <header className="relative flex h-12 items-center justify-center px-4">
           <Link
-            className="echo-press grid size-9 place-items-center text-[var(--ink-muted)]"
+            className="echo-press absolute left-3 grid size-8 place-items-center text-[var(--ink-soft)] transition-colors hover:text-[var(--ink)]"
             href="/mobile"
+            aria-label="返回"
           >
-            <ChevronLeft aria-hidden className="size-5" />
+            <ChevronLeft aria-hidden className="size-[18px]" strokeWidth={1.5} />
           </Link>
-          <h1 className="font-display text-[22px] italic text-[var(--ink)]">candy index</h1>
-          <span className="size-9" />
+          <h1 className="text-[17px] font-semibold tracking-[-0.02em] text-[var(--ink)] lowercase">
+            candy <span className="echo-underline">index.</span>
+          </h1>
         </header>
 
-        <div className="space-y-9 px-5 py-6">
-          <section>
-            <SectionLabel
-              title="工作糖果 · 3 種"
-              subtitle="累積特定工作聲達門檻後掉落，外觀由音場決定"
-            />
-            <div className="space-y-3">
-              {WORK_CLASSES.map((audioClass) => (
-                <WorkCandyCard key={audioClass} audioClass={audioClass} />
-              ))}
-            </div>
-          </section>
-
-          <section>
-            <SectionLabel
-              title="環境糖果 · 6 種"
-              subtitle="記錄工作場景脈絡，影響光譜但不直接掉落"
-            />
-            <div className="grid grid-cols-2 gap-2">
-              {AMBIENT_CLASSES.map((audioClass) => (
-                <AmbientCandyCard key={audioClass} audioClass={audioClass} />
-              ))}
-            </div>
-          </section>
-
-          <section>
-            <SectionLabel
-              title="靜默糖果 · 1 種"
-              subtitle="低活動狀態記錄，不觸發掉落"
-            />
-            <div className="grid grid-cols-2 gap-2">
-              {QUIET_CLASSES.map((audioClass) => (
-                <AmbientCandyCard key={audioClass} audioClass={audioClass} />
-              ))}
-            </div>
-          </section>
-
-          <section>
-            <SectionLabel title="成員糖果罐" subtitle="本週各成員收集的糖果" />
-            <div className="space-y-3">
-              {MOBILE_USERS.map((user) => (
-                <article
-                  key={user.id}
-                  className={`${CATALOG_CARD} p-4`}
-                  style={{ boxShadow: SOFT_SHADOW }}
-                >
-                  <div className="mb-3 flex items-center justify-between">
-                    <div className="flex items-center gap-2.5">
-                      <span
-                        className="grid size-9 shrink-0 place-items-center rounded-full text-sm font-black text-white"
-                        style={{
-                          background: `radial-gradient(circle at 30% 25%, color-mix(in srgb, ${user.accent} 45%, #fff 55%), ${user.accent} 76%)`,
-                          boxShadow: `0 8px 16px color-mix(in srgb, ${user.accent} 22%, transparent)`,
-                        }}
-                      >
-                        {user.name.slice(0, 1)}
-                      </span>
-                      <div>
-                        <p className="font-display text-[20px] italic leading-tight text-[var(--ink)]">{user.name}</p>
-                        <p className="text-xs font-medium text-[var(--ink-soft)]">{user.handle}</p>
-                      </div>
-                    </div>
-                    <span
-                      className="size-2.5 rounded-full"
-                      style={{
-                        background: user.online ? "var(--ribbon)" : "var(--rule)",
-                        boxShadow: user.online
-                          ? "0 0 0 4px rgba(255,31,99,.08)"
-                          : "none",
-                      }}
-                    />
-                  </div>
-                  {user.jar.length > 0 ? (
-                    <div className="flex flex-wrap gap-3">
-                      {user.jar.map((audioClass, index) => (
-                        <div key={`${user.id}-${audioClass}-${index}`} className="flex flex-col items-center gap-1">
-                          <CandyShape audioClass={audioClass} size={46} wrapped={index === 0} />
-                          <span className="text-[10px] font-medium text-[var(--ink-soft)]">
-                            {AUDIO_CONFIG[audioClass].short}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm font-medium text-[var(--ink-muted)]">罐子還是空的</p>
-                  )}
-                </article>
-              ))}
-            </div>
-          </section>
+        <div className="space-y-9 px-5 pt-4 pb-10">
+          <ActivityChart />
+          <ShapeIndex />
+          <ColorIndex />
         </div>
       </section>
     </main>

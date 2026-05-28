@@ -247,80 +247,112 @@ button:disabled {
   transform: translateZ(0);
 }
 
+/* Circle default — clear gradient body with a small same-color feather on the
+ * perimeter. The core itself fades at the edge, so it does not read as a hard
+ * disk sitting on a separate glow. */
 .candy-shape::before {
   content: "";
   position: absolute;
   z-index: 0;
-  inset: -5%;
+  inset: -2%;
   border-radius: inherit;
   background: var(--candy-gradient);
-  filter: blur(2.4px) saturate(1.05);
-  opacity: 0.54;
+  filter: blur(2.2px) saturate(1.06);
+  opacity: 0.24;
 }
 
 .candy-shape::after {
   content: "";
   position: absolute;
   z-index: 1;
-  inset: 3%;
+  inset: 0;
   border-radius: inherit;
   background: var(--candy-gradient);
-  filter: blur(1.15px) saturate(1.03);
-  opacity: 0.88;
+  filter: blur(1.45px) saturate(1.02);
+  opacity: 0.96;
+  -webkit-mask: radial-gradient(circle, #000 0 58%, rgba(0, 0, 0, 0.7) 78%, transparent 100%);
+          mask: radial-gradient(circle, #000 0 58%, rgba(0, 0, 0, 0.7) 78%, transparent 100%);
 }
 
-/* 1. Keyboard_heavy → pink-magenta flat bloom */
+/* Four silhouettes mapped by semantic name —
+ *   spiky (河豚)  → Keyboard_heavy "帶刺跳跳糖"
+ *   pea   (豌豆)  → Sigh           "雲朵軟糖"  (kidney-bean form)
+ *   donut (甜甜圈) → Mouse_click    "薄荷夾心糖"
+ *   circle (圓)  → everything else
+ *
+ * For non-circle shapes we mask the parent with an SVG that has feGaussianBlur
+ * baked in, so the mask's alpha falls off softly at the shape outline.
+ * Both pseudos get clipped by this soft-edged mask → 暈染 right on the edge.
+ * viewBox padded to -10/120 so the blur extension is not cut at SVG edges. */
+.candy-shape { border-radius: 50%; }
+
+.candy-shape-spiky,
+.candy-shape-pea,
+.candy-shape-donut {
+  border-radius: 0;
+}
+
+.candy-shape-spiky {
+  -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='-10 -10 120 120'><defs><filter id='b' x='-20%25' y='-20%25' width='140%25' height='140%25'><feGaussianBlur stdDeviation='2.4'/></filter></defs><path d='M50 6L58 18L70 10L72 24L86 22L82 36L94 40L84 50L94 60L82 64L86 78L72 76L70 90L58 82L50 94L42 82L30 90L28 76L14 78L18 64L6 60L16 50L6 40L18 36L14 22L28 24L30 10L42 18Z' fill='%23fff' filter='url(%23b)'/></svg>") center / 100% 100% no-repeat;
+          mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='-10 -10 120 120'><defs><filter id='b' x='-20%25' y='-20%25' width='140%25' height='140%25'><feGaussianBlur stdDeviation='2.4'/></filter></defs><path d='M50 6L58 18L70 10L72 24L86 22L82 36L94 40L84 50L94 60L82 64L86 78L72 76L70 90L58 82L50 94L42 82L30 90L28 76L14 78L18 64L6 60L16 50L6 40L18 36L14 22L28 24L30 10L42 18Z' fill='%23fff' filter='url(%23b)'/></svg>") center / 100% 100% no-repeat;
+}
+
+/* kidney-bean: rounded right lobe, concave indent on the left middle */
+.candy-shape-pea {
+  -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='-10 -10 120 120'><defs><filter id='b' x='-20%25' y='-20%25' width='140%25' height='140%25'><feGaussianBlur stdDeviation='3'/></filter></defs><path d='M58 14C80 14 92 30 92 52C92 74 76 88 56 88C42 88 32 82 30 72C28 64 36 58 36 50C36 42 26 38 28 30C30 20 42 14 58 14Z' fill='%23fff' filter='url(%23b)'/></svg>") center / 100% 100% no-repeat;
+          mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='-10 -10 120 120'><defs><filter id='b' x='-20%25' y='-20%25' width='140%25' height='140%25'><feGaussianBlur stdDeviation='3'/></filter></defs><path d='M58 14C80 14 92 30 92 52C92 74 76 88 56 88C42 88 32 82 30 72C28 64 36 58 36 50C36 42 26 38 28 30C30 20 42 14 58 14Z' fill='%23fff' filter='url(%23b)'/></svg>") center / 100% 100% no-repeat;
+}
+
+.candy-shape-donut {
+  -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='-10 -10 120 120'><defs><filter id='b' x='-20%25' y='-20%25' width='140%25' height='140%25'><feGaussianBlur stdDeviation='2.6'/></filter></defs><path d='M50 6a44 44 0 1 1 0 88 44 44 0 1 1 0-88zm0 30a14 14 0 1 0 0 28 14 14 0 1 0 0-28z' fill='%23fff' fill-rule='evenodd' filter='url(%23b)'/></svg>") center / 100% 100% no-repeat;
+          mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='-10 -10 120 120'><defs><filter id='b' x='-20%25' y='-20%25' width='140%25' height='140%25'><feGaussianBlur stdDeviation='2.6'/></filter></defs><path d='M50 6a44 44 0 1 1 0 88 44 44 0 1 1 0-88zm0 30a14 14 0 1 0 0 28 14 14 0 1 0 0-28z' fill='%23fff' fill-rule='evenodd' filter='url(%23b)'/></svg>") center / 100% 100% no-repeat;
+}
+
+/* 1 sound = 1 color. Multi-color gradients are generated from sound-mix
+ * percentages and passed inline through --candy-gradient. */
 .candy-keyboard {
   --candy-gradient:
-    linear-gradient(180deg, #ff73cf 0%, #f166d5 62%, #a772ff 100%);
+    linear-gradient(180deg, #ff8aa6 0%, #ff8aa6 100%);
 }
 
-/* 2. Sigh → orange-pink flat bloom */
 .candy-sigh {
   --candy-gradient:
-    linear-gradient(180deg, #ff9b52 0%, #ff8c64 66%, #ff82b4 100%);
+    linear-gradient(180deg, #ffb088 0%, #ffb088 100%);
 }
 
-/* 3. Mouse_click → lime-purple flat bloom */
 .candy-mouse {
   --candy-gradient:
-    linear-gradient(180deg, #baff58 0%, #b8f06e 43%, #9f78ff 100%);
+    linear-gradient(180deg, #88e0b0 0%, #88e0b0 100%);
 }
 
-/* 4. Speech → purple flat bloom */
 .candy-speech {
   --candy-gradient:
-    linear-gradient(180deg, #df8cff 0%, #bd6cff 48%, #8760ff 100%);
+    linear-gradient(180deg, #b896f5 0%, #b896f5 100%);
 }
 
-/* 5. Music → yellow-pink flat bloom */
 .candy-music {
   --candy-gradient:
-    linear-gradient(90deg, #ff8cb8 0%, #ffe96a 28%, #ffe96a 100%);
+    linear-gradient(180deg, #ffc878 0%, #ffc878 100%);
 }
 
-/* 6. Air_conditioner → aqua-purple flat bloom */
 .candy-air {
   --candy-gradient:
-    linear-gradient(135deg, #7ee8ff 0%, #7ee8ff 60%, #9877ff 100%);
+    linear-gradient(180deg, #92c8f3 0%, #92c8f3 100%);
 }
 
-/* 7. Traffic → blue-yellow flat bloom */
 .candy-traffic {
   --candy-gradient:
-    linear-gradient(180deg, #6694ff 0%, #6694ff 58%, #e7ec75 100%);
+    linear-gradient(180deg, #8585b8 0%, #8585b8 100%);
 }
 
-/* 8. Door_knock → coral-orange flat bloom */
 .candy-door {
   --candy-gradient:
-    linear-gradient(180deg, #ff8845 0%, #ff8655 68%, #ff86ad 100%);
+    linear-gradient(180deg, #c89572 0%, #c89572 100%);
 }
 
-/* 9. Silence → pale-blue flat bloom */
 .candy-silence {
   --candy-gradient:
-    linear-gradient(135deg, #a2edff 0%, #88e3f4 64%, #8fbfff 100%);
+    linear-gradient(180deg, #b0d8d2 0%, #b0d8d2 100%);
 }
 
 /* Wrapped band — minimal thin band, no gloss */
