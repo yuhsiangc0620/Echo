@@ -1,6 +1,7 @@
 import { Apple, ChevronLeft, Download, Monitor, SquareArrowOutUpRight } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import MobileInstallCard from "@/app/desktop/mobile-install-card";
 import ProfileCard from "@/app/desktop/profile-card";
 
 type GitHubReleaseAsset = {
@@ -121,6 +122,8 @@ export default async function DesktopPage() {
         </header>
 
         <section className="space-y-4 px-4 py-4">
+          <MobileInstallCard />
+
           <DownloadCard
             title="macOS"
             description="Apple Silicon 開發版。第一次打開後輸入和手機一樣的名稱，即會用同一個 User_ID 上傳。"
