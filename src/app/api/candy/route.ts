@@ -1,6 +1,6 @@
 import { AUDIO_CLASSES, AUDIO_CONFIG } from "@/lib/candy/catalog";
 import { broadcastPushNotification } from "@/lib/push/subscriptions";
-import { broadcastCandyEvent } from "@/lib/realtime/candy-events";
+import { broadcastCandyEvent, broadcastCandyMessageEvent } from "@/lib/realtime/candy-events";
 
 export const runtime = "nodejs";
 
@@ -8,7 +8,7 @@ const NOTION_FILE_UPLOAD_VERSION = "2026-03-11";
 const NOTION_DATABASE_QUERY_VERSION = "2022-06-28";
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+  "Access-Control-Allow-Methods": "GET,POST,PATCH,OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
 };
 
@@ -34,6 +34,14 @@ type CandyPayload = {
   screenshotHeight?: number;
   screenshotMasked?: boolean;
   localCreatedAt?: string;
+};
+
+type CandyMessagePayload = {
+  pageId?: string;
+  candyId?: string;
+  userId?: string;
+  userName?: string;
+  message?: string;
 };
 
 type UploadedScreenshot = {
@@ -117,14 +125,22 @@ function jsonResponse(body: unknown, init?: ResponseInit) {
 
 function textProperty(content: string) {
   return {
-    rich_text: [
-      {
-        text: {
-          content,
-        },
-      },
-    ],
+    rich_text: richTextChunks(content),
   };
+}
+
+function richTextChunks(content: string) {
+  const chunks: Array<{ text: { content: string } }> = [];
+
+  for (let index = 0; index < content.length; index += 1900) {
+    chunks.push({
+      text: {
+        content: content.slice(index, index + 1900),
+      },
+    });
+  }
+
+  return chunks;
 }
 
 function titleProperty(content: string) {
@@ -278,6 +294,10 @@ function messagesFromProperty(property?: NotionProperty) {
     .filter(Boolean);
 }
 
+function sanitizeMessagePart(value: string | undefined, fallback: string) {
+  return (value || fallback).replace(/\s+/g, " ").trim();
+}
+
 function fileFromProperty(property?: NotionProperty) {
   const file = property?.files?.[0];
 
@@ -300,7 +320,7 @@ function mapNotionPageToWeeklyFeedItem(page: NotionPage): WeeklyFeedItem {
   const properties = page.properties ?? {};
   const screenshot = fileFromProperty(properties.Screenshot_File);
   const candyId = titleFromProperty(properties.Candy_ID) || page.id;
-  const userId = textFromProperty(properties.User_ID) || "desktop-demo-user";
+  const userId = textFromProperty(properties.User_ID) || "unknown-user";
   const primaryAudioClass = properties.Primary_Audio_Class?.select?.name || "Keyboard_heavy";
   const audioClasses = (properties.Audio_Classes?.multi_select ?? [])
     .map((option) => option.name)
@@ -317,7 +337,89 @@ function mapNotionPageToWeeklyFeedItem(page: NotionPage): WeeklyFeedItem {
     screenshotUrl: screenshot.url,
     screenshotExpiresAt: screenshot.expiresAt,
     screenshotName: screenshot.name,
-    messages: messagesFromProperty(properties.Messages ?? properties.Attached_Messages),
+    messages: messagesFromProperty(properties.message_log ?? properties.Messages ?? properties.Attached_Messages),
+  };
+}
+
+async function getNotionPage(pageId: string) {
+  const notion = getNotionEnv();
+
+  if (!notion) {
+    throw new Error("Notion API token or database ID is not configured.");
+  }
+
+  const response = await fetch(`https://api.notion.com/v1/pages/${pageId}`, {
+    headers: {
+      Authorization: `Bearer ${notion.token}`,
+      "Notion-Version": NOTION_DATABASE_QUERY_VERSION,
+    },
+  });
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw new Error(result?.message ?? "Could not read Notion page.");
+  }
+
+  return result as NotionPage;
+}
+
+async function appendMessageLog(payload: CandyMessagePayload) {
+  const notion = getNotionEnv();
+
+  if (!notion) {
+    throw new Error("Notion API token or database ID is not configured.");
+  }
+
+  if (!payload.pageId?.trim()) {
+    throw new Error("Missing pageId.");
+  }
+
+  const userName = sanitizeMessagePart(payload.userName, "Echo user");
+  const userId = sanitizeMessagePart(payload.userId, "unknown-user");
+  const message = sanitizeMessagePart(payload.message, "");
+
+  if (!message) {
+    throw new Error("Missing message.");
+  }
+
+  const page = await getNotionPage(payload.pageId);
+  const currentLog = textFromProperty(page.properties?.message_log);
+  const nextLine = `${userName}：${message}`;
+  const nextLog = [currentLog, nextLine].filter(Boolean).join("\n");
+  const response = await fetch(`https://api.notion.com/v1/pages/${payload.pageId}`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${notion.token}`,
+      "Content-Type": "application/json",
+      "Notion-Version": NOTION_DATABASE_QUERY_VERSION,
+    },
+    body: JSON.stringify({
+      properties: {
+        message_log: {
+          rich_text: richTextChunks(nextLog),
+        },
+      },
+    }),
+  });
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw new Error(result?.message ?? "Could not update message_log.");
+  }
+
+  return {
+    pageId: payload.pageId,
+    candyId: payload.candyId ?? titleFromProperty(page.properties?.Candy_ID) ?? payload.pageId,
+    userId,
+    userName,
+    message,
+    line: nextLine,
+    messages: messagesFromProperty({
+      rich_text: richTextChunks(nextLog).map((part) => ({
+        plain_text: part.text.content,
+        text: part.text,
+      })),
+    }),
   };
 }
 
@@ -404,7 +506,7 @@ async function createNotionCandyPage(
 
   const properties: Record<string, unknown> = {
     Candy_ID: titleProperty(candyId),
-    User_ID: textProperty(payload.userId ?? "desktop-demo-user"),
+    User_ID: textProperty(payload.userId ?? "unknown-user"),
     Device_ID: textProperty(payload.deviceId ?? "desktop-overlay"),
     Primary_Audio_Class: {
       select: {
@@ -526,6 +628,19 @@ export async function POST(request: Request) {
   const candyId = payload.id ?? crypto.randomUUID();
   let uploadedScreenshot: UploadedScreenshot | null = null;
 
+  if (!payload.userId?.trim()) {
+    return jsonResponse(
+      {
+        ok: false,
+        destination: "notion.master_database",
+        error: {
+          message: "Missing userId. Complete Echo onboarding before uploading candy.",
+        },
+      },
+      { status: 400 },
+    );
+  }
+
   try {
     uploadedScreenshot =
       status === "Wrapped" ? await uploadScreenshotToNotion(payload, candyId) : null;
@@ -543,6 +658,19 @@ export async function POST(request: Request) {
   }
 
   const notionResult = await createNotionCandyPage(payload, candyId, status, uploadedScreenshot);
+
+  if (!notionResult) {
+    return jsonResponse(
+      {
+        ok: false,
+        destination: "notion.master_database",
+        error: {
+          message: "Notion API token or database ID is not configured.",
+        },
+      },
+      { status: 503 },
+    );
+  }
 
   if (notionResult && !notionResult.ok) {
     return jsonResponse(
@@ -562,7 +690,7 @@ export async function POST(request: Request) {
           body: `${payload.userId ?? "有人"} 包裝了一顆工作糖果。`,
           data: {
             candyId,
-            userId: payload.userId ?? "desktop-demo-user",
+            userId: payload.userId,
             status,
           },
         }).catch((error) => ({
@@ -577,7 +705,7 @@ export async function POST(request: Request) {
     status === "Wrapped"
       ? broadcastCandyEvent({
           candyId,
-          userId: payload.userId ?? "desktop-demo-user",
+          userId: payload.userId,
           status,
           createdAt: new Date().toISOString(),
         })
@@ -586,11 +714,11 @@ export async function POST(request: Request) {
   return jsonResponse(
     {
       ok: true,
-      destination: notionResult ? "notion.master_database" : "mock.notion.master_database",
+      destination: "notion.master_database",
       notion: notionResult,
       row: {
         Candy_ID: candyId,
-        User_ID: payload.userId ?? "desktop-demo-user",
+        User_ID: payload.userId,
         Device_ID: payload.deviceId ?? "desktop-overlay",
         Primary_Audio_Class: payload.primaryAudioClass ?? payload.audioClass ?? "Keyboard_heavy",
         Audio_Classes: Array.from(
@@ -617,11 +745,7 @@ export async function POST(request: Request) {
       storage: {
         screenshot:
           status === "Wrapped"
-            ? uploadedScreenshot ?? {
-                storage: getNotionEnv() ? "notion_file_upload" : "mock.notion_file_upload",
-                fileUploadId: null,
-                uploaded: false,
-              }
+            ? uploadedScreenshot
             : null,
       },
       websocket:
@@ -640,6 +764,39 @@ export async function POST(request: Request) {
   );
 }
 
+export async function PATCH(request: Request) {
+  const payload = (await request.json()) as CandyMessagePayload;
+
+  try {
+    const result = await appendMessageLog(payload);
+    const realtime = broadcastCandyMessageEvent({
+      candyId: result.candyId,
+      pageId: result.pageId,
+      userId: result.userId,
+      userName: result.userName,
+      createdAt: new Date().toISOString(),
+    });
+
+    return jsonResponse({
+      ok: true,
+      destination: "notion.master_database",
+      messageLog: result,
+      realtime,
+    });
+  } catch (error) {
+    return jsonResponse(
+      {
+        ok: false,
+        destination: "notion.master_database",
+        error: {
+          message: error instanceof Error ? error.message : "Could not append message_log.",
+        },
+      },
+      { status: 400 },
+    );
+  }
+}
+
 export async function GET(request: Request) {
   const url = new URL(request.url);
 
@@ -650,7 +807,7 @@ export async function GET(request: Request) {
       return jsonResponse({
         ok: true,
         view: "weekly-feed",
-        source: feed.configured ? "notion.master_database" : "mock.empty",
+        source: feed.configured ? "notion.master_database" : "empty",
         windowDays: MOBILE_FEED_WINDOW_DAYS,
         since: feed.since,
         items: feed.items,
@@ -702,7 +859,8 @@ export async function GET(request: Request) {
       scope: "network",
       windowDays: MOBILE_FEED_WINDOW_DAYS,
       includedStatuses: ["Wrapped"],
-      includes: ["Screenshot_File", "attached_messages"],
+      includes: ["Screenshot_File", "message_log"],
+      messageLogField: "message_log",
       excludes: ["Raw candy history", "full audio metrics"],
     },
     storage: {

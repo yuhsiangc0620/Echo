@@ -6,7 +6,7 @@ Run:
 npm run overlay
 ```
 
-The Electron window is transparent, frameless, always-on-top, and mouse-through by default. It asks for microphone permission, loads MediaPipe Audio Classifier, and keeps audio in RAM only.
+The Electron window is transparent, frameless, always-on-top, and mouse-through by default. It asks for microphone permission, checks screen-recording access for wrapping screenshots, loads MediaPipe Audio Classifier, and keeps audio in RAM only.
 
 ## Product Rules
 
@@ -18,9 +18,7 @@ The Electron window is transparent, frameless, always-on-top, and mouse-through 
 
 ## Debug Hotkeys
 
+Debug hotkeys are disabled by default for tester builds. Launch with `ECHO_DEBUG_SHORTCUTS=1 npm run overlay` to enable them.
+
 - `Cmd/Ctrl + Alt + E`: direct keyboard candy drop.
 - `Cmd/Ctrl + Alt + W`: direct wrapped sigh candy drop.
-- `Cmd/Ctrl + Alt + K`: fast-forward Keyboard aggregation to the 40-minute threshold.
-- `Cmd/Ctrl + Alt + M`: fast-forward Mouse aggregation to the 10-minute threshold.
-
-Use the direct and fast-forward shortcuts to verify the system overlay without waiting for the full real thresholds.

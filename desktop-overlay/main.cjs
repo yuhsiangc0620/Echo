@@ -1,6 +1,16 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 const path = require("node:path");
-const { app, BrowserWindow, desktopCapturer, globalShortcut, ipcMain, screen } = require("electron");
+const {
+  app,
+  BrowserWindow,
+  desktopCapturer,
+  globalShortcut,
+  ipcMain,
+  screen,
+  session,
+  shell,
+  systemPreferences,
+} = require("electron");
 
 let overlayWindow;
 let interactiveTimer;
@@ -32,14 +42,63 @@ function setOverlayInteractive(enabled) {
 }
 
 app.whenReady().then(() => {
-  const { session } = require("electron");
-
   session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
-    callback(permission === "media");
+    callback(permission === "media" || permission === "display-capture");
   });
 
-  session.defaultSession.setPermissionCheckHandler((_webContents, permission) => permission === "media");
+  session.defaultSession.setPermissionCheckHandler(
+    (_webContents, permission) => permission === "media" || permission === "display-capture",
+  );
 });
+
+function enableOpenAtLogin() {
+  if (!app.isPackaged) {
+    return;
+  }
+
+  app.setLoginItemSettings({
+    openAtLogin: true,
+    openAsHidden: true,
+  });
+}
+
+async function requestStartupPermissions() {
+  const permissions = {
+    microphone: "unknown",
+    screen: "unknown",
+    screenNeedsSettings: false,
+  };
+
+  if (process.platform !== "darwin") {
+    return permissions;
+  }
+
+  permissions.microphone = systemPreferences.getMediaAccessStatus("microphone");
+
+  if (permissions.microphone === "not-determined") {
+    const granted = await systemPreferences.askForMediaAccess("microphone").catch(() => false);
+    permissions.microphone = granted ? "granted" : systemPreferences.getMediaAccessStatus("microphone");
+  }
+
+  permissions.screen = systemPreferences.getMediaAccessStatus("screen");
+
+  if (permissions.screen !== "granted") {
+    await desktopCapturer
+      .getSources({
+        types: ["screen"],
+        thumbnailSize: { width: 1, height: 1 },
+      })
+      .catch(() => []);
+    permissions.screen = systemPreferences.getMediaAccessStatus("screen");
+    permissions.screenNeedsSettings = permissions.screen !== "granted";
+
+    if (permissions.screenNeedsSettings) {
+      shell.openExternal("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture");
+    }
+  }
+
+  return permissions;
+}
 
 function createOverlayWindow() {
   const primaryDisplay = screen.getPrimaryDisplay();
@@ -80,43 +139,34 @@ function createOverlayWindow() {
 }
 
 app.whenReady().then(() => {
+  enableOpenAtLogin();
   createOverlayWindow();
 
-  globalShortcut.register("CommandOrControl+Alt+E", () => {
-    overlayWindow?.webContents.send("echo:drop", {
-      audioClass: "Keyboard_heavy",
-      audioClasses: ["Keyboard_heavy", "Speech"],
-      soundMix: [
-        { audioClass: "Keyboard_heavy", weight: 0.62 },
-        { audioClass: "Speech", weight: 0.38 },
-      ],
-      wrapped: false,
+  if (process.env.ECHO_DEBUG_SHORTCUTS === "1") {
+    globalShortcut.register("CommandOrControl+Alt+E", () => {
+      overlayWindow?.webContents.send("echo:drop", {
+        audioClass: "Keyboard_heavy",
+        audioClasses: ["Keyboard_heavy", "Speech"],
+        soundMix: [
+          { audioClass: "Keyboard_heavy", weight: 0.62 },
+          { audioClass: "Speech", weight: 0.38 },
+        ],
+        wrapped: false,
+      });
     });
-  });
 
-  globalShortcut.register("CommandOrControl+Alt+W", () => {
-    overlayWindow?.webContents.send("echo:drop", {
-      audioClass: "Sigh",
-      audioClasses: ["Sigh", "Music"],
-      soundMix: [
-        { audioClass: "Sigh", weight: 0.72 },
-        { audioClass: "Music", weight: 0.28 },
-      ],
-      wrapped: true,
+    globalShortcut.register("CommandOrControl+Alt+W", () => {
+      overlayWindow?.webContents.send("echo:drop", {
+        audioClass: "Sigh",
+        audioClasses: ["Sigh", "Music"],
+        soundMix: [
+          { audioClass: "Sigh", weight: 0.72 },
+          { audioClass: "Music", weight: 0.28 },
+        ],
+        wrapped: true,
+      });
     });
-  });
-
-  globalShortcut.register("CommandOrControl+Alt+K", () => {
-    overlayWindow?.webContents.send("echo:fast-forward", {
-      audioClass: "Keyboard_heavy",
-    });
-  });
-
-  globalShortcut.register("CommandOrControl+Alt+M", () => {
-    overlayWindow?.webContents.send("echo:fast-forward", {
-      audioClass: "Mouse_click",
-    });
-  });
+  }
 });
 
 ipcMain.on("echo:interactive", (_event, enabled) => {
@@ -130,6 +180,11 @@ ipcMain.on("echo:focus", () => {
 });
 
 ipcMain.handle("echo:capture-screen", async () => {
+  if (process.platform === "darwin" && systemPreferences.getMediaAccessStatus("screen") !== "granted") {
+    shell.openExternal("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture");
+    throw new Error("Echo needs Screen Recording permission before screenshots can be wrapped.");
+  }
+
   const primaryDisplay = screen.getPrimaryDisplay();
   const scaleFactor = primaryDisplay.scaleFactor || 1;
   const width = Math.round(primaryDisplay.bounds.width * scaleFactor);
@@ -163,6 +218,8 @@ ipcMain.handle("echo:capture-screen", async () => {
     setOverlayInteractive(false);
   }
 });
+
+ipcMain.handle("echo:request-startup-permissions", requestStartupPermissions);
 
 app.on("window-all-closed", () => {
   app.quit();

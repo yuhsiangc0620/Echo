@@ -52,7 +52,8 @@
       ],
       "artifactName": "Echo-${version}-${arch}-mac.${ext}",
       "extendInfo": {
-        "NSMicrophoneUsageDescription": "Echo uses the microphone for on-device MediaPipe audio classification. Audio is not saved."
+        "NSMicrophoneUsageDescription": "Echo uses the microphone for on-device MediaPipe audio classification. Audio is not saved.",
+        "NSScreenCaptureUsageDescription": "Echo captures the current screen only when you choose to wrap and share a candy. You can mask private content before upload."
       }
     },
     "win": {

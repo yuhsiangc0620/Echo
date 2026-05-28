@@ -79,50 +79,9 @@ function timelineStopsFromDrops(drops: Drop[], pointCount: number) {
 function buildActivity(seed: string) {
   const n = 48;
   const rand = mulberry32(hashString(seed));
-  const values: number[] = [];
-  for (let i = 0; i < n; i++) {
-    const t = i / (n - 1);
-    const morning = Math.exp(-((t - 0.3) ** 2) * 36) * 0.85;
-    const afternoon = Math.exp(-((t - 0.7) ** 2) * 28) * 0.95;
-    const base = 0.18 + morning + afternoon;
-    const wander = (rand() - 0.5) * 0.16;
-    values.push(Math.max(0.06, Math.min(0.95, base + wander)));
-  }
-  // peaks → candy drops
-  const peaks: { i: number; v: number }[] = [];
-  for (let i = 2; i < n - 2; i++) {
-    if (values[i] > values[i - 1] && values[i] > values[i + 1] && values[i] > 0.55) {
-      peaks.push({ i, v: values[i] });
-    }
-  }
-  peaks.sort((a, b) => b.v - a.v);
-  const dropShapes: CandyShapeKind[] = ["spiky", "donut", "pea", "spiky"];
-  const dropTones: SoundMix[][] = [
-    [
-      { cls: "Keyboard_heavy", weight: 0.55 },
-      { cls: "Speech", weight: 0.3 },
-      { cls: "Air_conditioner", weight: 0.15 },
-    ],
-    [
-      { cls: "Mouse_click", weight: 0.62 },
-      { cls: "Music", weight: 0.25 },
-      { cls: "Speech", weight: 0.13 },
-    ],
-    [
-      { cls: "Sigh", weight: 0.7 },
-      { cls: "Silence", weight: 0.3 },
-    ],
-    [
-      { cls: "Keyboard_heavy", weight: 0.48 },
-      { cls: "Traffic", weight: 0.32 },
-      { cls: "Door_knock", weight: 0.2 },
-    ],
-  ];
-  const drops: Drop[] = peaks.slice(0, 4).map((p, j) => ({
-    i: p.i,
-    shape: dropShapes[j % dropShapes.length],
-    tones: dropTones[j % dropTones.length],
-  }));
+  const values = Array.from({ length: n }, () => 0.07 + rand() * 0.01);
+  const drops: Drop[] = [];
+
   return { values, drops };
 }
 
@@ -135,7 +94,7 @@ function ActivityChart() {
   const innerH = H - padY * 2;
   const baseY = H - padY;
 
-  const { values, drops } = buildActivity("yuhsiang-2026-w22");
+  const { values, drops } = buildActivity("empty");
   const n = values.length;
 
   const xs = values.map((_, i) => padX + (i / (n - 1)) * innerW);
@@ -160,9 +119,7 @@ function ActivityChart() {
     <div>
       <div className="flex items-baseline justify-between">
         <p className="echo-eyebrow">today · 工作聲音</p>
-        <p className="text-[10px] font-medium text-[var(--ink-soft)]">
-          {drops.length} 顆糖果掉落
-        </p>
+        <p className="text-[10px] font-medium text-[var(--ink-soft)]">等待桌面資料</p>
       </div>
       <div className="relative mt-3">
         <svg

@@ -22,6 +22,16 @@ export async function POST(request: Request) {
     );
   }
 
+  if (!payload.userId?.trim()) {
+    return Response.json(
+      {
+        ok: false,
+        error: "Missing userId.",
+      },
+      { status: 400 },
+    );
+  }
+
   const normalizedSubscription: PushSubscription = {
     endpoint: subscription.endpoint,
     expirationTime: subscription.expirationTime ?? null,
@@ -30,7 +40,7 @@ export async function POST(request: Request) {
       p256dh: subscription.keys.p256dh,
     },
   };
-  const result = registerPushSubscription(payload.userId ?? "mobile-demo-user", normalizedSubscription);
+  const result = registerPushSubscription(payload.userId, normalizedSubscription);
 
   return Response.json({
     ok: true,

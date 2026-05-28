@@ -882,7 +882,7 @@
 
         return {
           name: "Echo",
-          userId: window.echoOverlay.userId || "desktop-demo-user",
+          userId: window.echoOverlay.userId || "unknown-user",
         };
       }
 
@@ -1358,7 +1358,14 @@
 
       async function uploadCandy(payload) {
         try {
-          const profile = currentProfile();
+          const profile = readStoredProfile();
+
+          if (!profile?.userId) {
+            showProfilePanel();
+            setStatus("請先輸入使用者名稱，再收糖或包裝");
+            return;
+          }
+
           const response = await fetch(`${apiBaseUrl}/api/candy`, {
             method: "POST",
             headers: {
@@ -1446,6 +1453,23 @@
         }
       }
 
+      async function requestStartupPermissions() {
+        if (!window.echoOverlay.requestStartupPermissions) {
+          return;
+        }
+
+        try {
+          setStatus("正在確認麥克風與螢幕錄製權限");
+          const permissions = await window.echoOverlay.requestStartupPermissions();
+
+          if (permissions?.screenNeedsSettings) {
+            setStatus("請在系統設定允許 Echo 螢幕錄製，完成後重新開啟 Echo");
+          }
+        } catch (error) {
+          setStatus(error instanceof Error ? error.message : "權限檢查失敗");
+        }
+      }
+
       maskCanvas.addEventListener("pointerdown", (event) => {
         if (maskSending) {
           return;
@@ -1527,32 +1551,15 @@
         hideProfilePanel();
       });
 
-      window.echoOverlay.onFastForward((payload = {}) => {
-        const audioClass = payload.audioClass || "Keyboard_heavy";
-
-        buffers[audioClass] = RULES[audioClass].thresholdSec;
-        applyAggregation(
-          {
-            audioClass,
-            name: `debug ${audioClass}`,
-            score: 1,
-          },
-          0,
-        );
-      });
-      window.addEventListener("keydown", (event) => {
-        if (event.key.toLowerCase() === "e") {
-          dropCandy();
-        }
-      });
-
       renderBuffers();
       updateProfilePreview();
       updateProfileLabel();
       if (!readStoredProfile()) {
         showProfilePanel();
       }
-      startMediaPipeAudioClassifier();
+      requestStartupPermissions().finally(() => {
+        startMediaPipeAudioClassifier();
+      });
     </script>
   </body>
 </html>

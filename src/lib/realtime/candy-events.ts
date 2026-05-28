@@ -5,6 +5,14 @@ type CandyRealtimeEvent = {
   createdAt: string;
 };
 
+type CandyMessageEvent = {
+  candyId: string;
+  pageId: string;
+  userId: string;
+  userName: string;
+  createdAt: string;
+};
+
 const encoder = new TextEncoder();
 const globalForRealtime = globalThis as typeof globalThis & {
   __echoCandyEventControllers?: Set<ReadableStreamDefaultController<Uint8Array>>;
@@ -45,6 +53,22 @@ export function createCandyEventStream() {
 
 export function broadcastCandyEvent(event: CandyRealtimeEvent) {
   const payload = encodeServerSentEvent("candy.wrapped", event);
+
+  controllers.forEach((controller) => {
+    try {
+      controller.enqueue(payload);
+    } catch {
+      controllers.delete(controller);
+    }
+  });
+
+  return {
+    clients: controllers.size,
+  };
+}
+
+export function broadcastCandyMessageEvent(event: CandyMessageEvent) {
+  const payload = encodeServerSentEvent("candy.message", event);
 
   controllers.forEach((controller) => {
     try {

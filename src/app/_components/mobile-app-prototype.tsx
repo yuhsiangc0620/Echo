@@ -20,7 +20,7 @@ import {
 } from "react";
 import CandyShape from "@/app/_components/candy-shape";
 import { AUDIO_CLASSES, type CandyAudioClass } from "@/lib/candy/catalog";
-import { MOBILE_USERS, type JarUser, type WeeklyScreenshot } from "@/lib/mobile/mock-data";
+import { type JarUser, type WeeklyScreenshot } from "@/lib/mobile/mock-data";
 
 type EchoProfile = {
   name: string;
@@ -36,6 +36,7 @@ const EMPTY_WEEKLY_FEED_SNAPSHOT: WeeklyFeedSnapshot = {
 const CANDY_AUDIO_CLASS_SET = new Set<string>(AUDIO_CLASSES);
 
 type WeeklyFeedApiItem = {
+  pageId: string;
   candyId: string;
   userId: string;
   primaryAudioClass: string;
@@ -246,6 +247,9 @@ function ensureWeeklyFeedRealtime() {
   weeklyFeedStore.eventSource.addEventListener("candy.wrapped", () => {
     void loadWeeklyFeed();
   });
+  weeklyFeedStore.eventSource.addEventListener("candy.message", () => {
+    void loadWeeklyFeed();
+  });
 }
 
 function useWeeklyFeed() {
@@ -312,6 +316,7 @@ function liveUsersFromFeed(items: WeeklyFeedApiItem[], profile: EchoProfile | nu
 
       return {
         id: item.candyId,
+        pageId: item.pageId,
         ageHours,
         audioClasses,
         screenshotTone: toneForAudioClass(primaryAudioClass),
@@ -497,11 +502,13 @@ function ScreenshotCard({
   screenshot,
   messages,
   onReply,
+  currentUserName,
   userName,
 }: {
   screenshot: WeeklyScreenshot;
   messages: string[];
   onReply: (text: string) => void;
+  currentUserName: string;
   userName: string;
 }) {
   const [draft, setDraft] = useState("");
@@ -545,9 +552,10 @@ function ScreenshotCard({
       {messages.length > 0 ? (
         <div className="mt-5 flex flex-col gap-2">
           {messages.map((message, i) => {
-            const isYou = message.startsWith("You:");
-            const author = isYou ? "You" : (message.split(":")[0] ?? "—").trim();
-            const body = (isYou ? message.slice(4) : message.slice(author.length + 1)).trim();
+            const separatorIndex = message.search(/[:：]/);
+            const author = separatorIndex >= 0 ? message.slice(0, separatorIndex).trim() : "—";
+            const body = separatorIndex >= 0 ? message.slice(separatorIndex + 1).trim() : message;
+            const isYou = author === currentUserName || author === "You";
             return (
               <p
                 key={`${screenshot.id}-msg-${i}`}
@@ -678,7 +686,7 @@ function JarPreview({
 }
 
 export default function MobileAppPrototype() {
-  const [activeId, setActiveId] = useState(MOBILE_USERS[0].id);
+  const [activeId, setActiveId] = useState("");
   const jarDragStartXRef = useRef<number | null>(null);
   const jarDragDeltaRef = useRef(0);
   const [jarDragDelta, setJarDragDelta] = useState(0);
@@ -686,36 +694,48 @@ export default function MobileAppPrototype() {
   const weeklyFeed = useWeeklyFeed();
   const [nameDraft, setNameDraft] = useState("");
   const [pushStatus, setPushStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
-  const [messages, setMessages] = useState<Record<string, string[]>>(
-    Object.fromEntries(
-      MOBILE_USERS.flatMap((user) => user.weeklyScreenshots.map((screenshot) => [screenshot.id, screenshot.messages])),
-    ),
-  );
+  const [messages, setMessages] = useState<Record<string, string[]>>({});
   const liveUsers = useMemo(() => liveUsersFromFeed(weeklyFeed.items, profile), [profile, weeklyFeed.items]);
-  const users = useMemo(
-    () =>
-      liveUsers.length
-        ? liveUsers
-        : MOBILE_USERS.map((user) =>
-            user.id === "you" && profile
-              ? {
-                  ...user,
-                  name: profile.name,
-                  handle: profile.userId,
-                  caption: "這是你的工作糖果罐，桌面端使用同一個名稱即可同步。",
-                }
-              : user,
-          ),
-    [liveUsers, profile],
-  );
+  const users = useMemo(() => {
+    if (!profile) {
+      return liveUsers;
+    }
+
+    const hasProfileUser = liveUsers.some((user) => user.id === profile.userId);
+
+    if (hasProfileUser) {
+      return liveUsers;
+    }
+
+    return [
+      {
+        id: profile.userId,
+        name: profile.name,
+        handle: profile.userId,
+        online: true,
+        accent: "#ff8aa6",
+        jar: [],
+        caption: "你的工作糖果罐。",
+        weeklyScreenshots: [],
+      },
+      ...liveUsers,
+    ];
+  }, [liveUsers, profile]);
   const activeUser = useMemo(
-    () => users.find((user) => user.id === activeId) ?? users[0],
+    () => users.find((user) => user.id === activeId) ?? users[0] ?? null,
     [activeId, users],
   );
-  const activeIndex = Math.max(0, users.findIndex((user) => user.id === activeUser.id));
-  const activeWeeklyScreenshots = useMemo(() => weeklyScreenshotsFor(activeUser), [activeUser]);
+  const activeIndex = activeUser ? Math.max(0, users.findIndex((user) => user.id === activeUser.id)) : 0;
+  const activeWeeklyScreenshots = useMemo(
+    () => (activeUser ? weeklyScreenshotsFor(activeUser) : []),
+    [activeUser],
+  );
 
   function focusJarByIndex(nextIndex: number) {
+    if (!users.length) {
+      return;
+    }
+
     const clampedIndex = Math.min(users.length - 1, Math.max(0, nextIndex));
     const nextUser = users[clampedIndex];
     if (nextUser) {
@@ -772,17 +792,58 @@ export default function MobileAppPrototype() {
     emitStoredProfileChange();
   }
 
-  function addMessage(screenshotId: string, text: string) {
+  async function addMessage(screenshot: WeeklyScreenshot, text: string) {
+    if (!profile) {
+      return;
+    }
+
+    const pageId = screenshot.pageId;
+    const line = `${profile.name}：${text}`;
+
     setMessages((current) => ({
       ...current,
-      [screenshotId]: [...(current[screenshotId] ?? []), `You: ${text}`],
+      [screenshot.id]: [...(current[screenshot.id] ?? screenshot.messages ?? []), line],
     }));
+
+    if (!pageId) {
+      return;
+    }
+
+    const response = await fetch("/api/candy", {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        pageId,
+        candyId: screenshot.id,
+        userId: profile.userId,
+        userName: profile.name,
+        message: text,
+      }),
+    });
+    const result = await response.json().catch(() => ({}));
+
+    if (!response.ok || !result.ok) {
+      setMessages((current) => ({
+        ...current,
+        [screenshot.id]: current[screenshot.id]?.filter((message) => message !== line) ?? [],
+      }));
+      return;
+    }
+
+    void loadWeeklyFeed();
   }
 
   async function handleEnablePush() {
+    if (!profile) {
+      setPushStatus("error");
+      return;
+    }
+
     try {
       setPushStatus("loading");
-      await enablePushNotifications(profile?.userId ?? "mobile-demo-user");
+      await enablePushNotifications(profile.userId);
       setPushStatus("ready");
     } catch {
       setPushStatus("error");
@@ -873,10 +934,10 @@ export default function MobileAppPrototype() {
           <div className="flex shrink-0 items-center px-5 pb-3 pt-4">
             <div className="min-w-0">
               <p className="text-[11px] font-medium text-[var(--ink-soft)]">
-                {activeUser.online ? "online · just now" : "offline"}
+                {activeUser?.online ? "online · just now" : "offline"}
               </p>
               <h3 className="truncate text-[20px] font-semibold leading-tight tracking-tight text-[var(--ink)]">
-                {activeUser.name}
+                {activeUser?.name ?? "echo"}
                 <span className="text-[var(--ink-soft)]"> ’s candy</span>
               </h3>
             </div>
@@ -895,8 +956,11 @@ export default function MobileAppPrototype() {
                     <ScreenshotCard
                       screenshot={screenshot}
                       messages={messages[screenshot.id] ?? screenshot.messages ?? []}
-                      onReply={(text) => addMessage(screenshot.id, text)}
-                      userName={activeUser.name}
+                      onReply={(text) => {
+                        void addMessage(screenshot, text);
+                      }}
+                      currentUserName={profile?.name ?? "You"}
+                      userName={activeUser?.name ?? "echo"}
                     />
                   </div>
                 ))}
@@ -906,7 +970,7 @@ export default function MobileAppPrototype() {
                 <div className="grid gap-4 justify-items-center">
                   <Bag width={88} height={110}>
                     <span className="absolute inset-0 grid place-items-center opacity-40">
-                      <CandyShape audioClass={activeUser.jar[0] ?? "Speech"} size={20} />
+                      <CandyShape audioClass={activeUser?.jar[0] ?? "Speech"} size={20} />
                     </span>
                   </Bag>
                   <p className="text-[14px] font-medium leading-snug text-[var(--ink-muted)]">
