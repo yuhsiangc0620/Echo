@@ -1,5 +1,10 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 const path = require("node:path");
+const fs = require("node:fs");
+const https = require("node:https");
+const http = require("node:http");
+const os = require("node:os");
+const { exec, spawn } = require("node:child_process");
 const {
   app,
   BrowserWindow,
@@ -77,6 +82,109 @@ function enableOpenAtLogin() {
     openAsHidden: true,
   });
 }
+
+// ── Auto-updater helpers ──────────────────────────────────────────────────────
+
+function downloadFile(url, destPath, redirectCount = 0) {
+  return new Promise((resolve, reject) => {
+    if (redirectCount > 8) { reject(new Error("Too many redirects")); return; }
+    const client = url.startsWith("https") ? https : http;
+    const file = fs.createWriteStream(destPath);
+    client.get(url, { headers: { "User-Agent": "Echo-Updater" } }, (res) => {
+      if (res.statusCode === 301 || res.statusCode === 302 || res.statusCode === 307) {
+        file.close(() => {
+          try { fs.unlinkSync(destPath); } catch {}
+          downloadFile(res.headers.location, destPath, redirectCount + 1).then(resolve).catch(reject);
+        });
+        return;
+      }
+      if (res.statusCode !== 200) {
+        reject(new Error(`Download failed: HTTP ${res.statusCode}`));
+        return;
+      }
+      res.pipe(file);
+      file.on("finish", () => file.close(resolve));
+      file.on("error", reject);
+      res.on("error", reject);
+    }).on("error", reject);
+  });
+}
+
+function runCmd(cmd) {
+  return new Promise((resolve, reject) => {
+    exec(cmd, { timeout: 120_000 }, (err, stdout, stderr) => {
+      if (err) reject(new Error(stderr || err.message));
+      else resolve(stdout);
+    });
+  });
+}
+
+ipcMain.handle("echo:download-update", async (_event, { url }) => {
+  if (!app.isPackaged) {
+    throw new Error("Auto-update only works in a packaged build.");
+  }
+
+  const zipPath = path.join(os.tmpdir(), "echo-update.zip");
+  const extractDir = path.join(os.tmpdir(), "echo-update-extracted");
+
+  // Clean up leftovers from any previous attempt.
+  try { fs.rmSync(extractDir, { recursive: true, force: true }); } catch {}
+
+  // 1. Download the zip.
+  await downloadFile(url, zipPath);
+
+  if (process.platform === "darwin") {
+    // Echo.app is 3 directories up from the Electron binary:
+    //   /some/path/Echo.app/Contents/MacOS/Echo  →  Echo.app
+    const currentApp = path.resolve(process.execPath, "../../..");
+
+    // 2. Extract.
+    await runCmd(`unzip -o "${zipPath}" -d "${extractDir}"`);
+    const newApp = path.join(extractDir, "Echo.app");
+
+    // 3. Write a detached shell script that waits for us to quit, then
+    //    replaces Echo.app and re-opens it.
+    const scriptPath = path.join(os.tmpdir(), "echo-updater.sh");
+    fs.writeFileSync(scriptPath, [
+      "#!/bin/bash",
+      "sleep 2",
+      `rm -rf "${currentApp}"`,
+      `cp -Rf "${newApp}" "${currentApp}"`,
+      `open "${currentApp}"`,
+      `rm -f "${scriptPath}"`,
+      "",
+    ].join("\n"), { mode: 0o755 });
+
+    const child = spawn("bash", [scriptPath], { detached: true, stdio: "ignore" });
+    child.unref();
+
+  } else if (process.platform === "win32") {
+    // On Windows the app directory contains Echo.exe directly.
+    const currentDir = path.dirname(process.execPath);
+    const exePath = path.join(currentDir, "Echo.exe");
+    const scriptPath = path.join(os.tmpdir(), "echo-updater.bat");
+
+    fs.writeFileSync(scriptPath, [
+      "@echo off",
+      "timeout /t 3 /nobreak >nul",
+      // Extract then copy all files over the existing install.
+      `powershell -Command "Expand-Archive -Path '${zipPath}' -DestinationPath '${extractDir}' -Force; Copy-Item -Path '${extractDir}\\*' -Destination '${currentDir}' -Recurse -Force"`,
+      `start "" "${exePath}"`,
+      `del "%~f0"`,
+      "",
+    ].join("\r\n"));
+
+    const child = spawn("cmd.exe", ["/c", scriptPath], { detached: true, stdio: "ignore" });
+    child.unref();
+
+  } else {
+    throw new Error("Auto-update is not supported on this platform.");
+  }
+
+  // 4. Quit so the updater script can do its work.
+  setTimeout(() => app.quit(), 800);
+  return { ok: true };
+});
 
 async function requestStartupPermissions() {
   const permissions = {

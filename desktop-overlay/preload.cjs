@@ -29,6 +29,9 @@ contextBridge.exposeInMainWorld("echoOverlay", {
   getAppVersion() {
     return ipcRenderer.invoke("echo:app-version");
   },
+  downloadUpdate(url) {
+    return ipcRenderer.invoke("echo:download-update", { url });
+  },
   openExternal(url) {
     ipcRenderer.send("echo:open-external", url);
   },

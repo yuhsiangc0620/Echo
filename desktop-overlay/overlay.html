@@ -1895,11 +1895,32 @@
           const platform = window.echoOverlay.platform;
           const assetPattern = platform === "darwin" ? /arm64-mac\.zip$/ : /x64-win\.zip$/;
           const asset = (release.assets || []).find((a) => assetPattern.test(a.name));
-          const downloadUrl = asset?.browser_download_url ?? release.html_url;
+          const downloadUrl = asset?.browser_download_url ?? null;
+          const releaseUrl = release.html_url;
 
-          dashboardUpdateText.textContent =
-            `新版本 ${latestTag} 可用（目前 v${currentVersion}）— 下載後解壓縮替換即可`;
-          dashboardUpdateButton.onclick = () => window.echoOverlay.openExternal(downloadUrl);
+          dashboardUpdateText.textContent = `新版本 ${latestTag} 可用（目前 v${currentVersion}）`;
+
+          if (downloadUrl && window.echoOverlay.downloadUpdate) {
+            // Packaged build: can auto-download and replace in place.
+            dashboardUpdateButton.textContent = "自動更新";
+            dashboardUpdateButton.onclick = async () => {
+              dashboardUpdateButton.disabled = true;
+              dashboardUpdateText.textContent = "下載中，請稍候…";
+              try {
+                await window.echoOverlay.downloadUpdate(downloadUrl);
+                dashboardUpdateText.textContent = "安裝中，應用程式即將重新啟動…";
+              } catch (err) {
+                dashboardUpdateText.textContent = `更新失敗：${err?.message ?? "未知錯誤"}`;
+                dashboardUpdateButton.disabled = false;
+                dashboardUpdateButton.textContent = "重試";
+              }
+            };
+          } else {
+            // Dev / unsupported platform: fall back to opening the release page.
+            dashboardUpdateButton.textContent = "前往下載";
+            dashboardUpdateButton.onclick = () => window.echoOverlay.openExternal(releaseUrl);
+          }
+
           dashboardUpdate.hidden = false;
         } catch {
           // update check is non-critical, silent fail
