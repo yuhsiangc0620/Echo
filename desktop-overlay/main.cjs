@@ -167,13 +167,9 @@ function createTray() {
   const icon = nativeImage.createFromDataURL(
     "data:image/svg+xml;utf8," +
       encodeURIComponent(
-        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><path fill='#000' d='M16 2l3 6 6-3-2 7 7 2-7 3 3 7-7-2-3 7-3-7-7 2 3-7-7-3 7-2-2-7 6 3z'/></svg>",
+        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><defs><linearGradient id='g' x1='8' x2='24' y1='7' y2='25'><stop offset='0' stop-color='#ff7fa6'/><stop offset='.55' stop-color='#f279b8'/><stop offset='1' stop-color='#9a92ff'/></linearGradient></defs><rect width='32' height='32' fill='#fff7e8'/><path fill='url(#g)' d='M16 4.8 18.2 9l4-2.9.7 5 4.8-1.1-1.3 4.8 4.6 1.5-3.9 3 3.3 3.7-4.9.6.8 5-4.6-1.9-2.5 4.4-3.2-3.9-3.2 3.9-2.5-4.4-4.6 1.9.8-5-4.9-.6 3.3-3.7-3.9-3 4.6-1.5L4.3 10l4.8 1.1.7-5 4 2.9z'/></svg>",
       ),
   );
-
-  if (process.platform === "darwin") {
-    icon.setTemplateImage(true);
-  }
 
   tray = new Tray(icon);
   tray.setToolTip("Echo");

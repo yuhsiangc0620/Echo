@@ -32,8 +32,12 @@ export const metadata: Metadata = {
   },
   applicationName: "Echo",
   icons: {
-    icon: "/echo-icon.svg",
-    apple: "/echo-icon.svg",
+    icon: [
+      { url: "/echo-icon.svg", type: "image/svg+xml" },
+      { url: "/echo-icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/echo-icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
   },
 };
 

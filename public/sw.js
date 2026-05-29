@@ -27,8 +27,8 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     self.registration.showNotification(payload.title || "Echo", {
       body: payload.body || "有一顆包裝糖果剛掉進網路。",
-      icon: "/echo-icon.svg",
-      badge: "/echo-icon.svg",
+      icon: "/echo-icon-192.png",
+      badge: "/echo-icon-192.png",
       tag: "echo-candy-drop",
       data: payload.data || {},
     }),

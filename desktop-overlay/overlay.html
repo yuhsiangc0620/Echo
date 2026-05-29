@@ -336,19 +336,19 @@
 
       .dashboard-panel {
         position: fixed;
-        top: max(18px, env(safe-area-inset-top));
-        right: 18px;
+        inset: 0;
         z-index: 860;
-        width: min(390px, calc(100vw - 36px));
-        max-height: calc(100vh - 36px);
+        width: 100%;
+        height: 100%;
+        max-height: none;
         overflow: auto;
-        border: 1px solid rgba(23, 20, 18, 0.1);
-        border-radius: 18px;
-        background: rgba(255, 250, 240, 0.94);
-        padding: 14px;
+        border: 0;
+        border-radius: 0;
+        background: #fffefd;
+        padding: 0 0 max(28px, env(safe-area-inset-bottom));
         color: var(--ink);
-        box-shadow: 0 26px 90px rgba(23, 20, 18, 0.18);
-        backdrop-filter: blur(22px);
+        box-shadow: none;
+        backdrop-filter: none;
         pointer-events: auto;
       }
 
@@ -357,123 +357,147 @@
       }
 
       .dashboard-head {
-        display: flex;
-        align-items: start;
-        justify-content: space-between;
-        gap: 12px;
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        display: grid;
+        width: 100%;
+        max-width: none;
+        grid-template-columns: 42px minmax(0, 1fr) 42px;
+        align-items: center;
+        border-bottom: 1px solid rgba(28, 25, 22, 0.1);
+        background: rgba(255, 254, 253, 0.92);
+        padding: max(10px, env(safe-area-inset-top)) max(18px, calc((100vw - 480px) / 2 + 18px)) 10px;
+        backdrop-filter: blur(18px);
+      }
+
+      .dashboard-head::before {
+        content: "";
       }
 
       .dashboard-head small,
       .dashboard-section-label {
         display: block;
-        color: #8d857d;
-        font-size: 10px;
-        font-weight: 900;
-        letter-spacing: 0.12em;
+        color: #a8a098;
+        font-size: 9.5px;
+        font-weight: 700;
+        letter-spacing: 0.22em;
         text-transform: uppercase;
       }
 
+      .dashboard-head > div {
+        text-align: center;
+      }
+
       .dashboard-head h2 {
-        margin: 3px 0 0;
-        font-size: 20px;
-        letter-spacing: 0;
-        line-height: 1.15;
+        margin: 1px 0 0;
+        font-size: 17px;
+        font-weight: 650;
+        letter-spacing: -0.02em;
+        line-height: 1.2;
       }
 
       .dashboard-close {
         display: grid;
-        width: 34px;
-        height: 34px;
+        width: 36px;
+        height: 36px;
         min-width: 0;
         min-height: 0;
         place-items: center;
-        border: 1px solid rgba(23, 20, 18, 0.1);
+        justify-self: end;
+        border: 0;
         border-radius: 50%;
-        background: rgba(255, 255, 255, 0.72);
+        background: transparent;
+        color: #6e6760;
         font-size: 18px;
+        font-weight: 650;
         line-height: 1;
       }
 
       .dashboard-grid {
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: 8px;
-        margin-top: 14px;
+        width: min(calc(100% - 36px), 480px);
+        gap: 10px;
+        margin: 22px auto 0;
       }
 
       .dashboard-chip,
       .dashboard-card {
-        border: 1px solid rgba(23, 20, 18, 0.08);
-        border-radius: 12px;
-        background: rgba(255, 255, 255, 0.58);
+        border: 1px solid rgba(28, 25, 22, 0.1);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.74);
       }
 
       .dashboard-chip {
         display: grid;
-        gap: 3px;
-        min-height: 56px;
-        padding: 9px 10px;
+        gap: 6px;
+        min-height: 72px;
+        align-content: center;
+        padding: 12px 14px;
       }
 
       .dashboard-chip span:first-child {
-        color: #8d857d;
-        font-size: 10px;
-        font-weight: 850;
+        color: #a8a098;
+        font-size: 11px;
+        font-weight: 650;
       }
 
       .dashboard-chip span:last-child {
         overflow: hidden;
         color: var(--ink);
-        font-size: 12px;
-        font-weight: 900;
+        font-size: 14px;
+        font-weight: 700;
         text-overflow: ellipsis;
         white-space: nowrap;
       }
 
       .dashboard-card {
-        margin-top: 10px;
-        padding: 11px;
+        width: min(calc(100% - 36px), 480px);
+        margin: 14px auto 0;
+        padding: 18px;
       }
 
       .dashboard-sound {
-        margin-top: 7px;
-        font-size: 13px;
-        font-weight: 850;
+        margin-top: 12px;
+        font-size: 18px;
+        font-weight: 700;
         line-height: 1.45;
+        letter-spacing: -0.02em;
       }
 
       .dashboard-muted {
         color: #8d857d;
-        font-size: 11px;
-        font-weight: 750;
+        font-size: 12px;
+        font-weight: 600;
         line-height: 1.55;
       }
 
       .dashboard-bars {
         display: grid;
-        gap: 10px;
-        margin-top: 9px;
+        gap: 17px;
+        margin-top: 14px;
       }
 
       .dashboard-bar-row {
         display: grid;
-        gap: 5px;
+        gap: 8px;
       }
 
       .dashboard-bar-row header {
         display: flex;
         justify-content: space-between;
         gap: 10px;
-        color: #62594e;
-        font-size: 11px;
-        font-weight: 850;
+        color: #6e6760;
+        font-size: 13px;
+        font-weight: 650;
       }
 
       .dashboard-bar {
-        height: 7px;
+        height: 5px;
         overflow: hidden;
         border-radius: 999px;
-        background: rgba(23, 20, 18, 0.09);
+        background: rgba(28, 25, 22, 0.08);
       }
 
       .dashboard-bar span {
@@ -481,38 +505,47 @@
         width: var(--progress, 0%);
         height: 100%;
         border-radius: inherit;
-        background: linear-gradient(90deg, #ff8aa6, #b896f5);
+        background: #171412;
       }
 
       .dashboard-list {
         display: grid;
-        gap: 6px;
-        margin-top: 9px;
+        margin-top: 10px;
       }
 
       .dashboard-list div {
         display: flex;
+        min-height: 36px;
+        align-items: center;
         justify-content: space-between;
         gap: 10px;
-        border-bottom: 1px solid rgba(23, 20, 18, 0.06);
-        padding-bottom: 5px;
-        color: #62594e;
-        font-size: 11px;
-        font-weight: 750;
+        border-bottom: 1px solid rgba(28, 25, 22, 0.09);
+        color: #6e6760;
+        font-size: 13px;
+        font-weight: 650;
       }
 
       .dashboard-actions {
         display: flex;
         gap: 8px;
-        margin-top: 12px;
+        width: min(calc(100% - 36px), 480px);
+        margin: 22px auto 0;
       }
 
       .dashboard-actions button {
-        height: 34px;
+        height: 48px;
         flex: 1;
         border-radius: 999px;
+        border: 0;
         background: var(--ink);
         color: #fff;
+        font-size: 14px;
+        font-weight: 700;
+      }
+
+      .dashboard-actions + .dashboard-muted {
+        width: min(calc(100% - 36px), 480px);
+        margin: 16px auto 0;
       }
 
       .mask-panel {
@@ -841,11 +874,11 @@
           <span class="dashboard-section-label">aggregation</span>
           <div class="dashboard-bars">
             <div class="dashboard-bar-row">
-              <header><span>Keyboard_heavy</span><span id="dashboardKeyboardTime">00:00 / 40:00</span></header>
+              <header><span>Keyboard_heavy</span><span id="dashboardKeyboardTime">00:00 / 20:00</span></header>
               <div class="dashboard-bar"><span id="dashboardKeyboardBar"></span></div>
             </div>
             <div class="dashboard-bar-row">
-              <header><span>Mouse_click</span><span id="dashboardMouseTime">00:00 / 10:00</span></header>
+              <header><span>Mouse_click</span><span id="dashboardMouseTime">00:00 / 05:00</span></header>
               <div class="dashboard-bar"><span id="dashboardMouseBar"></span></div>
             </div>
             <div class="dashboard-bar-row">
@@ -929,20 +962,20 @@
 
       const RULES = {
         Keyboard_heavy: {
-          thresholdSec: 2400,
-          minScore: 0.72,
+          thresholdSec: 1200,
+          minScore: 0.68,
           labels: ["computer keyboard", "typing", "keyboard"],
           drops: true,
         },
         Mouse_click: {
-          thresholdSec: 600,
-          minScore: 0.65,
+          thresholdSec: 300,
+          minScore: 0.58,
           labels: ["click", "mouse"],
           drops: true,
         },
         Sigh: {
-          thresholdSec: 1.4,
-          minScore: 0.68,
+          thresholdSec: 1,
+          minScore: 0.62,
           labels: ["sigh"],
           drops: true,
         },
@@ -1223,9 +1256,9 @@
         dashboardTopSound.textContent = runtimeStatus.lastAudioClass
           ? `${runtimeStatus.lastAudioClass} · ${(runtimeStatus.lastScore || 0).toFixed(2)} · ${sinceSample}`
           : runtimeStatus.topLabel;
-        dashboardKeyboardTime.textContent = `${formatSec(buffers.Keyboard_heavy)} / 40:00`;
+        dashboardKeyboardTime.textContent = `${formatSec(buffers.Keyboard_heavy)} / 20:00`;
         dashboardKeyboardBar.style.setProperty("--progress", `${progressPercent("Keyboard_heavy")}%`);
-        dashboardMouseTime.textContent = `${formatSec(buffers.Mouse_click)} / 10:00`;
+        dashboardMouseTime.textContent = `${formatSec(buffers.Mouse_click)} / 05:00`;
         dashboardMouseBar.style.setProperty("--progress", `${progressPercent("Mouse_click")}%`);
         dashboardSighTime.textContent = `${formatSec(buffers.Sigh)} / 00:01`;
         dashboardSighBar.style.setProperty("--progress", `${progressPercent("Sigh")}%`);

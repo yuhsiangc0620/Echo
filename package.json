@@ -37,6 +37,7 @@
   "build": {
     "appId": "com.yuhsiang.echo",
     "productName": "Echo",
+    "icon": "desktop-overlay/assets/icon",
     "directories": {
       "output": "release"
     },
