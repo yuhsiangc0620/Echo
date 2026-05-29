@@ -1040,6 +1040,7 @@
         ambient: "記錄周圍聲音",
         permissions: {
           microphone: "unknown",
+          micNeedsSettings: false,
           openAtLogin: false,
           platform: "unknown",
           screen: "unknown",
@@ -1871,7 +1872,11 @@
             ...permissions,
           };
 
-          if (permissions?.screenNeedsSettings) {
+          if (permissions?.micNeedsSettings && permissions?.screenNeedsSettings) {
+            setStatus("請在系統設定允許 Echo 的麥克風與螢幕錄製，完成後重新開啟 Echo");
+          } else if (permissions?.micNeedsSettings) {
+            setStatus("請在剛開啟的系統設定允許 Echo 使用麥克風，完成後按重新檢查權限");
+          } else if (permissions?.screenNeedsSettings) {
             setStatus("請在系統設定允許 Echo 螢幕錄製，完成後重新開啟 Echo");
           } else {
             renderDashboard();

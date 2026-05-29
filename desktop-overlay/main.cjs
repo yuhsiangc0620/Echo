@@ -75,38 +75,78 @@ function enableOpenAtLogin() {
 async function requestStartupPermissions() {
   const permissions = {
     microphone: "unknown",
+    micNeedsSettings: false,
     openAtLogin: app.getLoginItemSettings().openAtLogin,
     platform: process.platform,
     screen: "unknown",
     screenNeedsSettings: false,
   };
 
-  if (process.platform !== "darwin") {
-    return permissions;
-  }
+  if (process.platform === "darwin") {
+    // ── Microphone ──────────────────────────────────────────────────────
+    permissions.microphone = systemPreferences.getMediaAccessStatus("microphone");
 
-  permissions.microphone = systemPreferences.getMediaAccessStatus("microphone");
+    if (permissions.microphone === "not-determined") {
+      // Triggers the native TCC prompt on a properly-signed build.
+      const granted = await systemPreferences.askForMediaAccess("microphone").catch(() => false);
+      permissions.microphone = granted
+        ? "granted"
+        : systemPreferences.getMediaAccessStatus("microphone");
+    }
 
-  if (permissions.microphone === "not-determined") {
-    const granted = await systemPreferences.askForMediaAccess("microphone").catch(() => false);
-    permissions.microphone = granted ? "granted" : systemPreferences.getMediaAccessStatus("microphone");
-  }
+    // Once a status is "denied"/"restricted" (or an unsigned build had the TCC
+    // prompt silently fail) askForMediaAccess can no longer surface a dialog —
+    // the only path left is the System Settings pane, so open it for the user.
+    permissions.micNeedsSettings = permissions.microphone !== "granted";
 
-  permissions.screen = systemPreferences.getMediaAccessStatus("screen");
-
-  if (permissions.screen !== "granted") {
-    await desktopCapturer
-      .getSources({
-        types: ["screen"],
-        thumbnailSize: { width: 1, height: 1 },
-      })
-      .catch(() => []);
+    // ── Screen recording ────────────────────────────────────────────────
     permissions.screen = systemPreferences.getMediaAccessStatus("screen");
-    permissions.screenNeedsSettings = permissions.screen !== "granted";
+
+    if (permissions.screen !== "granted") {
+      await desktopCapturer
+        .getSources({
+          types: ["screen"],
+          thumbnailSize: { width: 1, height: 1 },
+        })
+        .catch(() => []);
+      permissions.screen = systemPreferences.getMediaAccessStatus("screen");
+      permissions.screenNeedsSettings = permissions.screen !== "granted";
+    }
+
+    // Open the relevant Settings pane(s) so the user is never left stuck. The
+    // screen pane is opened last so it surfaces on top when both are missing
+    // (screen recording needs a manual toggle + app restart on macOS).
+    if (permissions.micNeedsSettings) {
+      shell.openExternal("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone");
+    }
 
     if (permissions.screenNeedsSettings) {
       shell.openExternal("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture");
     }
+
+    return permissions;
+  }
+
+  if (process.platform === "win32") {
+    // Windows has no Screen Recording gate — desktopCapturer works without it.
+    permissions.screen = "granted";
+
+    // askForMediaAccess is macOS-only; on Windows we can only read the status
+    // set by Settings › Privacy › Microphone and guide the user there.
+    try {
+      permissions.microphone = systemPreferences.getMediaAccessStatus("microphone");
+    } catch {
+      permissions.microphone = "unknown";
+    }
+
+    permissions.micNeedsSettings =
+      permissions.microphone === "denied" || permissions.microphone === "restricted";
+
+    if (permissions.micNeedsSettings) {
+      shell.openExternal("ms-settings:privacy-microphone");
+    }
+
+    return permissions;
   }
 
   return permissions;
