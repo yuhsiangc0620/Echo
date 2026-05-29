@@ -360,6 +360,7 @@
         position: sticky;
         top: 0;
         z-index: 2;
+        -webkit-app-region: drag;
         display: grid;
         width: 100%;
         max-width: none;
@@ -373,6 +374,14 @@
 
       .dashboard-head::before {
         content: "";
+      }
+
+      .dashboard-head button,
+      .dashboard-actions button,
+      .dashboard-update button,
+      .dashboard-panel input,
+      .dashboard-panel a {
+        -webkit-app-region: no-drag;
       }
 
       .dashboard-head small,
@@ -1101,6 +1110,11 @@
       let lastDropAt = 0;
       let maskImage = null;
 
+      // Window role: the same HTML powers two windows. "#dashboard" is the
+      // normal bounded dashboard window (owns the mic classifier + UI); the
+      // default is the fullscreen, click-through candy overlay.
+      const IS_DASHBOARD = location.hash.replace("#", "") === "dashboard";
+
       // ── Audio & screen feature state ──────────────────────────────────
       let activeStream = null;
       let activeAudioContext = null;
@@ -1118,6 +1132,12 @@
       let lastInteractiveChangeAt = 0;
 
       function syncInteractive() {
+        // The dashboard is a normal, always-interactive window. Interactivity
+        // juggling only applies to the click-through candy overlay.
+        if (IS_DASHBOARD) {
+          return;
+        }
+
         const enabled = interactiveTokens.size > 0;
 
         window.echoOverlay.setInteractive(enabled);
@@ -1337,10 +1357,12 @@
         dashboardPanel.hidden = !visible;
 
         if (visible) {
-          beginInteractive("dashboard");
-          window.echoOverlay.focus();
+          if (!IS_DASHBOARD) {
+            beginInteractive("dashboard");
+            window.echoOverlay.focus();
+          }
           renderDashboard();
-        } else {
+        } else if (!IS_DASHBOARD) {
           endInteractive("dashboard");
         }
       }
@@ -1350,6 +1372,13 @@
       }
 
       function showProfilePanel() {
+        // Onboarding only happens in the dashboard window; the candy overlay is
+        // click-through, so showing a modal there would just trap the user.
+        if (!IS_DASHBOARD) {
+          setStatus("請在 Echo 視窗輸入使用者名稱後再收糖");
+          return;
+        }
+
         profilePanel.hidden = false;
         endInteractive("profile-hover");
         endInteractive("profile-focus");
@@ -1642,13 +1671,25 @@
         }
 
         lastDropAt = now;
-        dropCandy({
+        const audioClasses = collectAudioClasses(audioClass);
+        const durationSec = buffers[audioClass];
+        const payload = {
           audioClass,
-          audioClasses: collectAudioClasses(audioClass),
+          audioClasses,
           wrapped: false,
           source: "MediaPipe local aggregator",
-          durationSec: buffers[audioClass],
-        });
+          durationSec,
+          // Compute the full mix here so the overlay window can render the candy
+          // without needing its own aggregation buffers.
+          soundMix: soundMixForCandy(audioClass, audioClasses, durationSec),
+        };
+
+        if (IS_DASHBOARD) {
+          window.echoOverlay.spawnCandy(payload);
+        } else {
+          dropCandy(payload);
+        }
+
         buffers[audioClass] = 0;
       }
 
@@ -1968,6 +2009,12 @@
           return;
         }
 
+        // Track the stream immediately so a later model-load failure can still
+        // be cleaned up by stopMic() (otherwise the open mic stream leaks).
+        activeStream = stream;
+        micActive = true;
+        updateActionButtons();
+
         try {
           setStatus("載入 MediaPipe Audio Classifier");
           const mediaPipe = await import("../node_modules/@mediapipe/tasks-audio/audio_bundle.mjs").catch(() =>
@@ -1985,9 +2032,6 @@
             },
             maxResults: 8,
           });
-          activeStream = stream;
-          micActive = true;
-          updateActionButtons();
 
           const audioContext = new AudioContext({ sampleRate: 16000 });
           const source = audioContext.createMediaStreamSource(stream);
@@ -2104,7 +2148,13 @@
         closeMaskEditor(result);
       });
 
-      dashboardCloseButton.addEventListener("click", () => setDashboardVisible(false));
+      dashboardCloseButton.addEventListener("click", () => {
+        if (IS_DASHBOARD) {
+          window.echoOverlay.hideDashboard();
+        } else {
+          setDashboardVisible(false);
+        }
+      });
       dashboardMicButton.addEventListener("click", () => {
         if (micActive) {
           stopMic();
@@ -2115,6 +2165,11 @@
       dashboardScreenButton.addEventListener("click", () => {
         screenCaptureEnabled = !screenCaptureEnabled;
         updateActionButtons();
+        if (IS_DASHBOARD) {
+          // The wrap-and-share flow lives in the overlay window, so push the
+          // new toggle state across.
+          window.echoOverlay.setScreenCapture(screenCaptureEnabled);
+        }
       });
       dashboardPermissionButton.addEventListener("click", () => {
         requestStartupPermissions();
@@ -2170,14 +2225,30 @@
       renderBuffers();
       updateProfilePreview();
       updateProfileLabel();
-      if (!readStoredProfile()) {
-        showProfilePanel();
-      }
-      requestStartupPermissions().finally(() => {
-        startMediaPipeAudioClassifier();
-      });
 
-      void checkForUpdate();
+      if (IS_DASHBOARD) {
+        // The bounded dashboard window owns the mic classifier, permission
+        // checks, onboarding and the update banner.
+        setDashboardVisible(true);
+
+        if (!readStoredProfile()) {
+          showProfilePanel();
+        }
+
+        requestStartupPermissions().finally(() => {
+          startMediaPipeAudioClassifier();
+        });
+
+        void checkForUpdate();
+      } else {
+        // The fullscreen overlay is the click-through candy layer. It only
+        // renders candies relayed from the dashboard and runs the wrap flow.
+        if (window.echoOverlay.onSetScreenCapture) {
+          window.echoOverlay.onSetScreenCapture((enabled) => {
+            screenCaptureEnabled = enabled;
+          });
+        }
+      }
     </script>
   </body>
 </html>

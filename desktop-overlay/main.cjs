@@ -21,8 +21,10 @@ const {
 } = require("electron");
 
 let overlayWindow;
+let dashboardWindow;
 let interactiveTimer;
 let tray;
+let isQuitting = false;
 
 const singleInstanceLock = app.requestSingleInstanceLock();
 
@@ -57,18 +59,20 @@ function setOverlayInteractive(enabled) {
 }
 
 app.whenReady().then(() => {
+  // Allow the renderer's getUserMedia / desktopCapturer at the Electron (app)
+  // layer. This does NOT bypass macOS TCC — on macOS the OS still independently
+  // gates microphone/screen access, so the native permission prompt still
+  // appears the first time and Echo is added to the privacy list. Denying
+  // "media" here would block getUserMedia *before* the OS is ever consulted,
+  // breaking the microphone on both macOS and Windows.
+  const allowedPermissions = new Set(["media", "audioCapture", "display-capture"]);
+
   session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
-    if (permission === "display-capture") {
-      callback(true);
-      return;
-    }
-    // For "media" (microphone/camera), defer to the OS so macOS TCC registers
-    // the request and adds Echo to the Microphone privacy list.
-    callback(false);
+    callback(allowedPermissions.has(permission));
   });
 
   session.defaultSession.setPermissionCheckHandler(
-    (_webContents, permission) => permission === "display-capture",
+    (_webContents, permission) => allowedPermissions.has(permission),
   );
 });
 
@@ -267,36 +271,35 @@ async function requestStartupPermissions() {
 }
 
 function showDashboard() {
-  if (!overlayWindow || overlayWindow.isDestroyed()) {
+  if (!dashboardWindow || dashboardWindow.isDestroyed()) {
     return;
   }
 
-  overlayWindow.show();
-  overlayWindow.focus();
-  setOverlayInteractive(true);
-  overlayWindow.webContents.send("echo:dashboard-command", { type: "show-dashboard" });
+  dashboardWindow.show();
+  dashboardWindow.focus();
 }
 
 function toggleDashboard() {
-  if (!overlayWindow || overlayWindow.isDestroyed()) {
+  if (!dashboardWindow || dashboardWindow.isDestroyed()) {
     return;
   }
 
-  overlayWindow.show();
-  overlayWindow.focus();
-  setOverlayInteractive(true);
-  overlayWindow.webContents.send("echo:toggle-dashboard");
+  if (dashboardWindow.isVisible()) {
+    dashboardWindow.hide();
+  } else {
+    dashboardWindow.show();
+    dashboardWindow.focus();
+  }
 }
 
 function sendDashboardCommand(type) {
-  if (!overlayWindow || overlayWindow.isDestroyed()) {
+  if (!dashboardWindow || dashboardWindow.isDestroyed()) {
     return;
   }
 
-  overlayWindow.show();
-  overlayWindow.focus();
-  setOverlayInteractive(true);
-  overlayWindow.webContents.send("echo:dashboard-command", { type });
+  dashboardWindow.show();
+  dashboardWindow.focus();
+  dashboardWindow.webContents.send("echo:dashboard-command", { type });
 }
 
 function dropTestCandy() {
@@ -382,7 +385,51 @@ function createOverlayWindow() {
   overlayWindow.once("ready-to-show", () => {
     overlayWindow.showInactive();
     setOverlayInteractive(false);
-    setTimeout(showDashboard, 250);
+  });
+}
+
+function createDashboardWindow() {
+  dashboardWindow = new BrowserWindow({
+    width: 420,
+    height: 760,
+    minWidth: 360,
+    minHeight: 540,
+    center: true,
+    show: false,
+    frame: false,
+    transparent: false,
+    backgroundColor: "#fffefd",
+    resizable: true,
+    movable: true,
+    fullscreenable: false,
+    skipTaskbar: false,
+    title: "Echo",
+    webPreferences: {
+      preload: path.join(__dirname, "preload.cjs"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      // Keep the mic classifier running at full rate even when the window is
+      // hidden in the background.
+      backgroundThrottling: false,
+    },
+  });
+
+  // Same HTML as the overlay, but the "#dashboard" hash switches it into a
+  // normal bounded dashboard window that owns the mic classifier and UI.
+  dashboardWindow.loadFile(path.join(__dirname, "overlay.html"), { hash: "dashboard" });
+
+  dashboardWindow.once("ready-to-show", () => {
+    dashboardWindow.show();
+    dashboardWindow.focus();
+  });
+
+  // Closing just hides the window so the classifier keeps listening; the app
+  // only fully quits from the tray menu.
+  dashboardWindow.on("close", (event) => {
+    if (!isQuitting) {
+      event.preventDefault();
+      dashboardWindow.hide();
+    }
   });
 }
 
@@ -393,6 +440,7 @@ app.on("activate", showDashboard);
 app.whenReady().then(() => {
   enableOpenAtLogin();
   createOverlayWindow();
+  createDashboardWindow();
   createTray();
 
   globalShortcut.register("CommandOrControl+Alt+D", toggleDashboard);
@@ -471,6 +519,31 @@ ipcMain.on("echo:open-external", (_event, url) => {
   if (typeof url === "string" && /^https?:\/\//.test(url)) {
     shell.openExternal(url);
   }
+});
+
+// The dashboard window runs the classifier; when it decides to drop a candy it
+// relays the payload here so the fullscreen overlay can render it.
+ipcMain.on("echo:spawn-candy", (_event, payload) => {
+  if (overlayWindow && !overlayWindow.isDestroyed()) {
+    overlayWindow.webContents.send("echo:drop", payload);
+  }
+});
+
+// Keep the overlay's screenshot toggle in sync with the dashboard button.
+ipcMain.on("echo:set-screen-capture", (_event, enabled) => {
+  if (overlayWindow && !overlayWindow.isDestroyed()) {
+    overlayWindow.webContents.send("echo:set-screen-capture", Boolean(enabled));
+  }
+});
+
+ipcMain.on("echo:hide-dashboard", () => {
+  if (dashboardWindow && !dashboardWindow.isDestroyed()) {
+    dashboardWindow.hide();
+  }
+});
+
+app.on("before-quit", () => {
+  isQuitting = true;
 });
 
 app.on("window-all-closed", () => {

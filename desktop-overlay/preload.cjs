@@ -35,5 +35,17 @@ contextBridge.exposeInMainWorld("echoOverlay", {
   openExternal(url) {
     ipcRenderer.send("echo:open-external", url);
   },
+  spawnCandy(payload) {
+    ipcRenderer.send("echo:spawn-candy", payload);
+  },
+  setScreenCapture(enabled) {
+    ipcRenderer.send("echo:set-screen-capture", enabled);
+  },
+  onSetScreenCapture(callback) {
+    ipcRenderer.on("echo:set-screen-capture", (_event, enabled) => callback(enabled));
+  },
+  hideDashboard() {
+    ipcRenderer.send("echo:hide-dashboard");
+  },
   platform: process.platform,
 });
