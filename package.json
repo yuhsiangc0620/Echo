@@ -1,6 +1,6 @@
 {
   "name": "echo",
-  "version": "2.9.0",
+  "version": "3.0.0",
   "private": true,
   "main": "desktop-overlay/main.cjs",
   "scripts": {
@@ -52,6 +52,9 @@
         "zip"
       ],
       "artifactName": "Echo-${version}-${arch}-mac.${ext}",
+      "hardenedRuntime": true,
+      "entitlements": "desktop-overlay/entitlements.mac.plist",
+      "entitlementsInherit": "desktop-overlay/entitlements.mac.plist",
       "extendInfo": {
         "NSMicrophoneUsageDescription": "Echo uses the microphone for on-device MediaPipe audio classification. Audio is not saved.",
         "NSScreenCaptureUsageDescription": "Echo captures the current screen only when you choose to wrap and share a candy. You can mask private content before upload."
