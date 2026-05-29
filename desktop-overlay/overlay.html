@@ -920,7 +920,7 @@
           <span class="dashboard-section-label">aggregation</span>
           <div class="dashboard-bars">
             <div class="dashboard-bar-row">
-              <header><span>Keyboard_heavy</span><span id="dashboardKeyboardTime">00:00 / 05:00</span></header>
+              <header><span>Keyboard_heavy</span><span id="dashboardKeyboardTime">00:00 / 03:00</span></header>
               <div class="dashboard-bar"><span id="dashboardKeyboardBar"></span></div>
             </div>
             <div class="dashboard-bar-row">
@@ -1020,20 +1020,24 @@
 
       const RULES = {
         Keyboard_heavy: {
-          thresholdSec: 300,
-          minScore: 0.3,
+          thresholdSec: 180,
+          // Detection threshold is handled separately (0.01 raw score).
+          // minScore here is kept only as a fallback reference.
+          minScore: 0.01,
           labels: ["computer keyboard", "typing", "keyboard", "tap", "tick"],
           drops: true,
         },
         Mouse_click: {
           thresholdSec: 180,
-          minScore: 0.22,
+          minScore: 0.01,
           labels: ["click", "mouse", "tick", "tap"],
           drops: true,
         },
         Sigh: {
-          thresholdSec: 1,
-          minScore: 0.62,
+          // Sigh drops immediately on detection — threshold is not used for
+          // accumulation, only as a minimum score gate.
+          thresholdSec: 0,
+          minScore: 0.55,
           labels: ["sigh"],
           drops: true,
         },
@@ -1114,8 +1118,10 @@
       // reading or thinking. Progress is preserved through gaps shorter than the
       // grace window; only a sustained switch to other activity drains it, and
       // even then slowly.
-      const ACTIVITY_GAP_GRACE_SEC = { Keyboard_heavy: 45, Mouse_click: 30 };
-      const ACTIVITY_DECAY_RATE = { Keyboard_heavy: 0.05, Mouse_click: 0.08 };
+      // 1 hour grace: short breaks, reading, thinking do not drain the buffer.
+      const ACTIVITY_GAP_GRACE_SEC = { Keyboard_heavy: 3600, Mouse_click: 3600 };
+      // Drain 1 accumulated second per 60 idle seconds (1/60 ≈ 0.0167/s).
+      const ACTIVITY_DECAY_RATE = { Keyboard_heavy: 1 / 60, Mouse_click: 1 / 60 };
       const lastActivityAt = { Keyboard_heavy: 0, Mouse_click: 0 };
 
       // Window role: the same HTML powers two windows. "#dashboard" is the
@@ -1341,7 +1347,7 @@
         dashboardTopSound.textContent = runtimeStatus.lastAudioClass
           ? `${runtimeStatus.lastAudioClass} · ${(runtimeStatus.lastScore || 0).toFixed(2)} · ${sinceSample}`
           : runtimeStatus.topLabel;
-        dashboardKeyboardTime.textContent = `${formatSec(buffers.Keyboard_heavy)} / 05:00`;
+        dashboardKeyboardTime.textContent = `${formatSec(buffers.Keyboard_heavy)} / 03:00`;
         dashboardKeyboardBar.style.setProperty("--progress", `${progressPercent("Keyboard_heavy")}%`);
         dashboardMouseTime.textContent = `${formatSec(buffers.Mouse_click)} / 03:00`;
         dashboardMouseBar.style.setProperty("--progress", `${progressPercent("Mouse_click")}%`);
@@ -1650,21 +1656,37 @@
         );
       }
 
+      // Keyboard and mouse accumulation runs directly from raw YAMNet scores
+      // (score ≥ 0.01 counts) so they are handled in accumulateFromRaw(), not here.
       function applyAggregation(sample, durationSec) {
         runtimeStatus.topLabel = `${sample.name} ${Number(sample.score).toFixed(2)} -> ${sample.audioClass}`;
         runtimeStatus.lastAudioClass = sample.audioClass;
         runtimeStatus.lastSampleAt = Date.now();
         runtimeStatus.lastScore = Number(sample.score || 0);
 
-        accumulateActivity("Keyboard_heavy", sample.audioClass === "Keyboard_heavy", durationSec);
-        accumulateActivity("Mouse_click", sample.audioClass === "Mouse_click", durationSec);
-
+        // Sigh: drop a candy immediately on detection — no accumulation needed.
         if (sample.audioClass === "Sigh") {
-          buffers.Sigh += durationSec;
-        } else {
-          buffers.Sigh = 0;
+          const now = performance.now();
+          if (now - lastDropAt >= 2500) {
+            lastDropAt = now;
+            const audioClasses = collectAudioClasses("Sigh");
+            const payload = {
+              audioClass: "Sigh",
+              audioClasses,
+              wrapped: false,
+              source: "MediaPipe sigh detector",
+              durationSec: 1,
+              soundMix: soundMixForCandy("Sigh", audioClasses, 1),
+            };
+            if (IS_DASHBOARD) {
+              window.echoOverlay.spawnCandy(payload);
+            } else {
+              dropCandy(payload);
+            }
+          }
         }
 
+        // Ambient-only classes (Speech, Music, Air_conditioner, etc.)
         if (RULES[sample.audioClass] && !RULES[sample.audioClass].drops && sample.audioClass !== "Silence") {
           buffers[sample.audioClass] += durationSec;
           runtimeStatus.ambient = `${labels[sample.audioClass]?.[0] || sample.audioClass} ${formatSec(buffers[sample.audioClass])}`;
@@ -1678,10 +1700,19 @@
           setStatus("MediaPipe Audio Classifier 正在本地推論");
         }
 
-        maybeDropFromAggregator("Keyboard_heavy");
-        maybeDropFromAggregator("Mouse_click");
-        maybeDropFromAggregator("Sigh");
         renderBuffers();
+      }
+
+      // Keyboard and mouse: check raw YAMNet scores directly so any appearance
+      // (score ≥ 0.01) counts, regardless of what the dominant class is.
+      function accumulateFromRaw(categories, durationSec) {
+        const kbScore = scoreFor(categories, RULES.Keyboard_heavy);
+        accumulateActivity("Keyboard_heavy", (kbScore?.score ?? 0) >= 0.01, durationSec);
+        maybeDropFromAggregator("Keyboard_heavy");
+
+        const mouseScore = scoreFor(categories, RULES.Mouse_click);
+        accumulateActivity("Mouse_click", (mouseScore?.score ?? 0) >= 0.01, durationSec);
+        maybeDropFromAggregator("Mouse_click");
       }
 
       function maybeDropFromAggregator(audioClass) {
@@ -2088,7 +2119,9 @@
               name: category.categoryName || category.displayName || "unknown",
               score: Number(category.score || 0),
             }));
-            applyAggregation(normalizeCategories(categories), inputData.length / audioContext.sampleRate);
+            const durationSec = inputData.length / audioContext.sampleRate;
+            accumulateFromRaw(categories, durationSec);
+            applyAggregation(normalizeCategories(categories), durationSec);
           };
 
           setStatus("MediaPipe Audio Classifier 正在本地推論");
