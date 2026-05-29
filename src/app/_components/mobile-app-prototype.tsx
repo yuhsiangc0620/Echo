@@ -19,7 +19,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import CandyShape from "@/app/_components/candy-shape";
-import { AUDIO_CLASSES, type CandyAudioClass } from "@/lib/candy/catalog";
+import { AUDIO_CLASSES, AUDIO_CONFIG, type CandyAudioClass } from "@/lib/candy/catalog";
 import { type JarUser, type WeeklyScreenshot } from "@/lib/mobile/mock-data";
 
 type EchoProfile = {
@@ -321,7 +321,7 @@ function liveUsersFromFeed(items: WeeklyFeedApiItem[], profile: EchoProfile | nu
         audioClasses,
         screenshotTone: toneForAudioClass(primaryAudioClass),
         screenshotUrl: item.screenshotUrl ?? undefined,
-        caption: `${minutes} 分鐘工作聲音包裝截圖。`,
+        minutes,
         messages: item.messages ?? [],
       };
     });
@@ -523,19 +523,22 @@ function ScreenshotCard({
 
   return (
     <article className="relative pt-4">
-      {/* meta row — tiny age + tiny candy chip row */}
-      <header className="mb-2 flex items-center justify-between">
+      {/* meta row — age + small tags inline, candy shape on right */}
+      <header className="mb-3 flex items-center gap-2">
         <span className="echo-eyebrow">{formatAge(screenshot.ageHours)} ago</span>
+        {screenshot.minutes > 0 ? (
+          <span className="rounded-full border border-[var(--rule)] px-1.5 py-px text-[9px] font-medium tracking-wide text-[var(--ink-soft)]">
+            {screenshot.minutes} min
+          </span>
+        ) : null}
+        {primaryAudioClass ? (
+          <span className="rounded-full border border-[var(--rule)] px-1.5 py-px text-[9px] font-medium tracking-wide text-[var(--ink-soft)]">
+            {AUDIO_CONFIG[primaryAudioClass].short.toLowerCase()}
+          </span>
+        ) : null}
+        <span className="flex-1" />
         {primaryAudioClass ? <CandyShape audioClass={primaryAudioClass} size={14} /> : null}
       </header>
-
-      {/* caption — generous size, generous leading */}
-      <p
-        className="mb-4 text-[15px] leading-[1.55] text-[var(--ink)]"
-        style={{ fontWeight: 500 }}
-      >
-        {screenshot.caption}
-      </p>
 
       {/* screenshot — minimal thin border */}
       <div
@@ -899,7 +902,7 @@ export default function MobileAppPrototype() {
         {/* ══════════════ POSTER HERO — bags on the shelf ══════════════ */}
         <section className="shrink-0 overflow-hidden px-5 pb-2 pt-3">
           <div
-            className="echo-jar-carousel relative h-[126px] overflow-clip touch-pan-y select-none"
+            className="echo-jar-carousel relative h-[136px] overflow-clip touch-pan-y select-none"
             onPointerDown={beginJarDrag}
             onPointerMove={updateJarDrag}
             onPointerUp={endJarDrag}

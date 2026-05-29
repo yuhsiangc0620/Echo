@@ -7,7 +7,7 @@ export type WeeklyScreenshot = {
   audioClasses: CandyAudioClass[];
   screenshotTone: "code" | "doc" | "chat";
   screenshotUrl?: string;
-  caption: string;
+  minutes: number;
   messages: string[];
 };
 
