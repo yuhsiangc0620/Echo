@@ -920,11 +920,11 @@
           <span class="dashboard-section-label">aggregation</span>
           <div class="dashboard-bars">
             <div class="dashboard-bar-row">
-              <header><span>Keyboard_heavy</span><span id="dashboardKeyboardTime">00:00 / 20:00</span></header>
+              <header><span>Keyboard_heavy</span><span id="dashboardKeyboardTime">00:00 / 05:00</span></header>
               <div class="dashboard-bar"><span id="dashboardKeyboardBar"></span></div>
             </div>
             <div class="dashboard-bar-row">
-              <header><span>Mouse_click</span><span id="dashboardMouseTime">00:00 / 05:00</span></header>
+              <header><span>Mouse_click</span><span id="dashboardMouseTime">00:00 / 03:00</span></header>
               <div class="dashboard-bar"><span id="dashboardMouseBar"></span></div>
             </div>
             <div class="dashboard-bar-row">
@@ -1020,15 +1020,15 @@
 
       const RULES = {
         Keyboard_heavy: {
-          thresholdSec: 1200,
-          minScore: 0.68,
-          labels: ["computer keyboard", "typing", "keyboard"],
+          thresholdSec: 300,
+          minScore: 0.3,
+          labels: ["computer keyboard", "typing", "keyboard", "tap", "tick"],
           drops: true,
         },
         Mouse_click: {
-          thresholdSec: 300,
-          minScore: 0.58,
-          labels: ["click", "mouse"],
+          thresholdSec: 180,
+          minScore: 0.22,
+          labels: ["click", "mouse", "tick", "tap"],
           drops: true,
         },
         Sigh: {
@@ -1109,6 +1109,14 @@
 
       let lastDropAt = 0;
       let maskImage = null;
+
+      // Keyboard / mouse activity arrives in bursts with natural pauses while
+      // reading or thinking. Progress is preserved through gaps shorter than the
+      // grace window; only a sustained switch to other activity drains it, and
+      // even then slowly.
+      const ACTIVITY_GAP_GRACE_SEC = { Keyboard_heavy: 45, Mouse_click: 30 };
+      const ACTIVITY_DECAY_RATE = { Keyboard_heavy: 0.05, Mouse_click: 0.08 };
+      const lastActivityAt = { Keyboard_heavy: 0, Mouse_click: 0 };
 
       // Window role: the same HTML powers two windows. "#dashboard" is the
       // normal bounded dashboard window (owns the mic classifier + UI); the
@@ -1333,9 +1341,9 @@
         dashboardTopSound.textContent = runtimeStatus.lastAudioClass
           ? `${runtimeStatus.lastAudioClass} · ${(runtimeStatus.lastScore || 0).toFixed(2)} · ${sinceSample}`
           : runtimeStatus.topLabel;
-        dashboardKeyboardTime.textContent = `${formatSec(buffers.Keyboard_heavy)} / 20:00`;
+        dashboardKeyboardTime.textContent = `${formatSec(buffers.Keyboard_heavy)} / 05:00`;
         dashboardKeyboardBar.style.setProperty("--progress", `${progressPercent("Keyboard_heavy")}%`);
-        dashboardMouseTime.textContent = `${formatSec(buffers.Mouse_click)} / 05:00`;
+        dashboardMouseTime.textContent = `${formatSec(buffers.Mouse_click)} / 03:00`;
         dashboardMouseBar.style.setProperty("--progress", `${progressPercent("Mouse_click")}%`);
         dashboardSighTime.textContent = `${formatSec(buffers.Sigh)} / 00:01`;
         dashboardSighBar.style.setProperty("--progress", `${progressPercent("Sigh")}%`);
@@ -1619,23 +1627,37 @@
         };
       }
 
+      function accumulateActivity(audioClass, isMatch, durationSec) {
+        const now = performance.now();
+
+        if (isMatch) {
+          buffers[audioClass] += durationSec;
+          lastActivityAt[audioClass] = now;
+          return;
+        }
+
+        // Allow blank gaps between keystrokes / clicks: keep accumulated
+        // progress untouched within the grace window after the last hit.
+        const sinceActiveSec = (now - lastActivityAt[audioClass]) / 1000;
+        if (sinceActiveSec <= ACTIVITY_GAP_GRACE_SEC[audioClass]) {
+          return;
+        }
+
+        // Past the grace window the user has likely moved on, so drain slowly.
+        buffers[audioClass] = Math.max(
+          0,
+          buffers[audioClass] - durationSec * ACTIVITY_DECAY_RATE[audioClass],
+        );
+      }
+
       function applyAggregation(sample, durationSec) {
         runtimeStatus.topLabel = `${sample.name} ${Number(sample.score).toFixed(2)} -> ${sample.audioClass}`;
         runtimeStatus.lastAudioClass = sample.audioClass;
         runtimeStatus.lastSampleAt = Date.now();
         runtimeStatus.lastScore = Number(sample.score || 0);
 
-        if (sample.audioClass === "Keyboard_heavy") {
-          buffers.Keyboard_heavy += durationSec;
-        } else {
-          buffers.Keyboard_heavy = Math.max(0, buffers.Keyboard_heavy - durationSec * 0.15);
-        }
-
-        if (sample.audioClass === "Mouse_click") {
-          buffers.Mouse_click += durationSec;
-        } else {
-          buffers.Mouse_click = Math.max(0, buffers.Mouse_click - durationSec * 0.25);
-        }
+        accumulateActivity("Keyboard_heavy", sample.audioClass === "Keyboard_heavy", durationSec);
+        accumulateActivity("Mouse_click", sample.audioClass === "Mouse_click", durationSec);
 
         if (sample.audioClass === "Sigh") {
           buffers.Sigh += durationSec;
@@ -2004,7 +2026,15 @@
             video: false,
           });
         } catch (error) {
-          setStatus("無法存取麥克風；請在系統設定允許 Echo 使用麥克風後重新檢查權限");
+          const isWindows = window.echoOverlay.platform === "win32";
+          setStatus(
+            isWindows
+              ? "無法存取麥克風：請在「設定 › 隱私權 › 麥克風」開啟『讓桌面應用程式存取你的麥克風』後按重新檢查"
+              : "無法存取麥克風；請在系統設定允許 Echo 使用麥克風後重新檢查權限",
+          );
+          if (window.echoOverlay.openMicSettings) {
+            window.echoOverlay.openMicSettings();
+          }
           runtimeStatus.topLabel = error instanceof Error ? error.message : "microphone unavailable";
           return;
         }

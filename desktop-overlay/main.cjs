@@ -542,6 +542,16 @@ ipcMain.on("echo:hide-dashboard", () => {
   }
 });
 
+// Open the OS microphone privacy pane. Used when getUserMedia is blocked at the
+// OS level (on Windows, the "let desktop apps access your microphone" toggle).
+ipcMain.on("echo:open-mic-settings", () => {
+  if (process.platform === "darwin") {
+    shell.openExternal("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone");
+  } else if (process.platform === "win32") {
+    shell.openExternal("ms-settings:privacy-microphone");
+  }
+});
+
 app.on("before-quit", () => {
   isQuitting = true;
 });

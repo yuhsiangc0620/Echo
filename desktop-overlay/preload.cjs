@@ -47,5 +47,8 @@ contextBridge.exposeInMainWorld("echoOverlay", {
   hideDashboard() {
     ipcRenderer.send("echo:hide-dashboard");
   },
+  openMicSettings() {
+    ipcRenderer.send("echo:open-mic-settings");
+  },
   platform: process.platform,
 });
