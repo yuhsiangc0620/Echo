@@ -8,6 +8,12 @@ contextBridge.exposeInMainWorld("echoOverlay", {
   onDrop(callback) {
     ipcRenderer.on("echo:drop", (_event, payload) => callback(payload));
   },
+  onToggleDashboard(callback) {
+    ipcRenderer.on("echo:toggle-dashboard", () => callback());
+  },
+  onDashboardCommand(callback) {
+    ipcRenderer.on("echo:dashboard-command", (_event, payload) => callback(payload));
+  },
   focus() {
     ipcRenderer.send("echo:focus");
   },

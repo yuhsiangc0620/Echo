@@ -8,6 +8,12 @@ npm run overlay
 
 The Electron window is transparent, frameless, always-on-top, and mouse-through by default. It asks for microphone permission, checks screen-recording access for wrapping screenshots, loads MediaPipe Audio Classifier, and keeps audio in RAM only.
 
+## Status Dashboard
+
+- Open the Echo app, click the Echo tray icon, or press `Cmd/Ctrl + Alt + D` to view the desktop status dashboard. The shortcut still toggles it for quick checks.
+- The dashboard shows microphone permission, screen-recording permission, open-at-login state, current user, MediaPipe status, recent sound classes, and local aggregation progress.
+- The overlay remains mouse-through when the dashboard is closed.
+
 ## Product Rules
 
 - `Keyboard_heavy`: MediaPipe labels like `Computer keyboard` / `Typing`, score >= `0.72`, local aggregation reaches `40:00`, then drop candy.
@@ -18,7 +24,8 @@ The Electron window is transparent, frameless, always-on-top, and mouse-through 
 
 ## Debug Hotkeys
 
-Debug hotkeys are disabled by default for tester builds. Launch with `ECHO_DEBUG_SHORTCUTS=1 npm run overlay` to enable them.
+The keyboard candy test shortcut is enabled in tester builds.
 
 - `Cmd/Ctrl + Alt + E`: direct keyboard candy drop.
+- Extra debug shortcuts are disabled by default. Launch with `ECHO_DEBUG_SHORTCUTS=1 npm run overlay` to enable them.
 - `Cmd/Ctrl + Alt + W`: direct wrapped sigh candy drop.

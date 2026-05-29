@@ -334,6 +334,187 @@
         color: var(--cream);
       }
 
+      .dashboard-panel {
+        position: fixed;
+        top: max(18px, env(safe-area-inset-top));
+        right: 18px;
+        z-index: 860;
+        width: min(390px, calc(100vw - 36px));
+        max-height: calc(100vh - 36px);
+        overflow: auto;
+        border: 1px solid rgba(23, 20, 18, 0.1);
+        border-radius: 18px;
+        background: rgba(255, 250, 240, 0.94);
+        padding: 14px;
+        color: var(--ink);
+        box-shadow: 0 26px 90px rgba(23, 20, 18, 0.18);
+        backdrop-filter: blur(22px);
+        pointer-events: auto;
+      }
+
+      .dashboard-panel[hidden] {
+        display: none;
+      }
+
+      .dashboard-head {
+        display: flex;
+        align-items: start;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .dashboard-head small,
+      .dashboard-section-label {
+        display: block;
+        color: #8d857d;
+        font-size: 10px;
+        font-weight: 900;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .dashboard-head h2 {
+        margin: 3px 0 0;
+        font-size: 20px;
+        letter-spacing: 0;
+        line-height: 1.15;
+      }
+
+      .dashboard-close {
+        display: grid;
+        width: 34px;
+        height: 34px;
+        min-width: 0;
+        min-height: 0;
+        place-items: center;
+        border: 1px solid rgba(23, 20, 18, 0.1);
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.72);
+        font-size: 18px;
+        line-height: 1;
+      }
+
+      .dashboard-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        margin-top: 14px;
+      }
+
+      .dashboard-chip,
+      .dashboard-card {
+        border: 1px solid rgba(23, 20, 18, 0.08);
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.58);
+      }
+
+      .dashboard-chip {
+        display: grid;
+        gap: 3px;
+        min-height: 56px;
+        padding: 9px 10px;
+      }
+
+      .dashboard-chip span:first-child {
+        color: #8d857d;
+        font-size: 10px;
+        font-weight: 850;
+      }
+
+      .dashboard-chip span:last-child {
+        overflow: hidden;
+        color: var(--ink);
+        font-size: 12px;
+        font-weight: 900;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .dashboard-card {
+        margin-top: 10px;
+        padding: 11px;
+      }
+
+      .dashboard-sound {
+        margin-top: 7px;
+        font-size: 13px;
+        font-weight: 850;
+        line-height: 1.45;
+      }
+
+      .dashboard-muted {
+        color: #8d857d;
+        font-size: 11px;
+        font-weight: 750;
+        line-height: 1.55;
+      }
+
+      .dashboard-bars {
+        display: grid;
+        gap: 10px;
+        margin-top: 9px;
+      }
+
+      .dashboard-bar-row {
+        display: grid;
+        gap: 5px;
+      }
+
+      .dashboard-bar-row header {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        color: #62594e;
+        font-size: 11px;
+        font-weight: 850;
+      }
+
+      .dashboard-bar {
+        height: 7px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: rgba(23, 20, 18, 0.09);
+      }
+
+      .dashboard-bar span {
+        display: block;
+        width: var(--progress, 0%);
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, #ff8aa6, #b896f5);
+      }
+
+      .dashboard-list {
+        display: grid;
+        gap: 6px;
+        margin-top: 9px;
+      }
+
+      .dashboard-list div {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        border-bottom: 1px solid rgba(23, 20, 18, 0.06);
+        padding-bottom: 5px;
+        color: #62594e;
+        font-size: 11px;
+        font-weight: 750;
+      }
+
+      .dashboard-actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 12px;
+      }
+
+      .dashboard-actions button {
+        height: 34px;
+        flex: 1;
+        border-radius: 999px;
+        background: var(--ink);
+        color: #fff;
+      }
+
       .mask-panel {
         position: fixed;
         inset: 0;
@@ -622,6 +803,69 @@
           <button type="submit">開始同步</button>
         </form>
       </div>
+      <section id="dashboardPanel" class="dashboard-panel" hidden aria-label="Echo 狀態儀表板">
+        <div class="dashboard-head">
+          <div>
+            <small>Echo desktop</small>
+            <h2>聲音與權限</h2>
+          </div>
+          <button id="dashboardCloseButton" class="dashboard-close" type="button" aria-label="關閉儀表板">×</button>
+        </div>
+
+        <div class="dashboard-grid">
+          <div class="dashboard-chip">
+            <span>麥克風</span>
+            <span id="dashboardMic">檢查中</span>
+          </div>
+          <div class="dashboard-chip">
+            <span>螢幕錄製</span>
+            <span id="dashboardScreen">檢查中</span>
+          </div>
+          <div class="dashboard-chip">
+            <span>開機啟動</span>
+            <span id="dashboardLogin">檢查中</span>
+          </div>
+          <div class="dashboard-chip">
+            <span>使用者</span>
+            <span id="dashboardProfile">尚未設定</span>
+          </div>
+        </div>
+
+        <div class="dashboard-card">
+          <span class="dashboard-section-label">analyzer</span>
+          <div id="dashboardAnalyzer" class="dashboard-sound">等待 MediaPipe</div>
+          <p id="dashboardTopSound" class="dashboard-muted">尚未收到聲音樣本</p>
+        </div>
+
+        <div class="dashboard-card">
+          <span class="dashboard-section-label">aggregation</span>
+          <div class="dashboard-bars">
+            <div class="dashboard-bar-row">
+              <header><span>Keyboard_heavy</span><span id="dashboardKeyboardTime">00:00 / 40:00</span></header>
+              <div class="dashboard-bar"><span id="dashboardKeyboardBar"></span></div>
+            </div>
+            <div class="dashboard-bar-row">
+              <header><span>Mouse_click</span><span id="dashboardMouseTime">00:00 / 10:00</span></header>
+              <div class="dashboard-bar"><span id="dashboardMouseBar"></span></div>
+            </div>
+            <div class="dashboard-bar-row">
+              <header><span>Sigh</span><span id="dashboardSighTime">00:00 / 00:01</span></header>
+              <div class="dashboard-bar"><span id="dashboardSighBar"></span></div>
+            </div>
+          </div>
+          <p id="dashboardAmbient" class="dashboard-muted">周圍聲音尚未累積</p>
+        </div>
+
+        <div class="dashboard-card">
+          <span class="dashboard-section-label">recent classes</span>
+          <div id="dashboardCategories" class="dashboard-list"></div>
+        </div>
+
+        <div class="dashboard-actions">
+          <button id="dashboardPermissionButton" type="button">重新檢查權限</button>
+        </div>
+        <p class="dashboard-muted">打開 Echo app 會顯示此面板，也可用 Cmd/Ctrl + Option/Alt + D 開關。</p>
+      </section>
       <div id="maskPanel" class="mask-panel" hidden>
         <div class="mask-prompt"><span>塗黑需要遮蔽的內容</span></div>
         <div class="mask-stage">
@@ -657,6 +901,23 @@
       const profileCard = document.querySelector(".profile-card");
       const profileNameInput = document.querySelector("#profileNameInput");
       const profilePreview = document.querySelector("#profilePreview");
+      const dashboardPanel = document.querySelector("#dashboardPanel");
+      const dashboardCloseButton = document.querySelector("#dashboardCloseButton");
+      const dashboardPermissionButton = document.querySelector("#dashboardPermissionButton");
+      const dashboardMic = document.querySelector("#dashboardMic");
+      const dashboardScreen = document.querySelector("#dashboardScreen");
+      const dashboardLogin = document.querySelector("#dashboardLogin");
+      const dashboardProfile = document.querySelector("#dashboardProfile");
+      const dashboardAnalyzer = document.querySelector("#dashboardAnalyzer");
+      const dashboardTopSound = document.querySelector("#dashboardTopSound");
+      const dashboardKeyboardTime = document.querySelector("#dashboardKeyboardTime");
+      const dashboardKeyboardBar = document.querySelector("#dashboardKeyboardBar");
+      const dashboardMouseTime = document.querySelector("#dashboardMouseTime");
+      const dashboardMouseBar = document.querySelector("#dashboardMouseBar");
+      const dashboardSighTime = document.querySelector("#dashboardSighTime");
+      const dashboardSighBar = document.querySelector("#dashboardSighBar");
+      const dashboardAmbient = document.querySelector("#dashboardAmbient");
+      const dashboardCategories = document.querySelector("#dashboardCategories");
       const maskPanel = document.querySelector("#maskPanel");
       const maskCanvas = document.querySelector("#maskCanvas");
       const maskClearButton = document.querySelector("#maskClearButton");
@@ -736,10 +997,21 @@
       };
       const runtimeStatus = {
         classifier: "MediaPipe Audio Classifier 載入中",
+        lastAudioClass: null,
+        lastCategories: [],
+        lastSampleAt: null,
+        lastScore: null,
         topLabel: "等待麥克風",
         keyboardProgress: 0,
         mouseProgress: 0,
         ambient: "記錄周圍聲音",
+        permissions: {
+          microphone: "unknown",
+          openAtLogin: false,
+          platform: "unknown",
+          screen: "unknown",
+          screenNeedsSettings: false,
+        },
         profile: "尚未設定",
       };
 
@@ -793,7 +1065,12 @@
       }
 
       function hasActiveInteractionSurface() {
-        return !profilePanel.hidden || !maskPanel.hidden || Boolean(document.querySelector(".candy-card:hover"));
+        return (
+          !profilePanel.hidden ||
+          !dashboardPanel.hidden ||
+          !maskPanel.hidden ||
+          Boolean(document.querySelector(".candy-card:hover"))
+        );
       }
 
       window.setInterval(() => {
@@ -890,10 +1167,96 @@
         const profile = currentProfile();
 
         runtimeStatus.profile = `${profile.name} · ${profile.userId}`;
+        renderDashboard();
       }
 
       function updateProfilePreview() {
         profilePreview.textContent = `User_ID: ${userIdFromName(profileNameInput.value)}`;
+      }
+
+      function permissionText(value, grantedText = "已允許") {
+        if (value === "granted" || value === true) {
+          return grantedText;
+        }
+
+        if (value === "not-determined") {
+          return "尚未決定";
+        }
+
+        if (value === "denied" || value === "restricted") {
+          return "需要到系統設定開啟";
+        }
+
+        return "待確認";
+      }
+
+      function progressPercent(audioClass) {
+        const threshold = RULES[audioClass].thresholdSec;
+
+        if (!Number.isFinite(threshold) || threshold <= 0) {
+          return 0;
+        }
+
+        return Math.min(100, (buffers[audioClass] / threshold) * 100);
+      }
+
+      function escapeHtml(value) {
+        return String(value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;");
+      }
+
+      function renderDashboard() {
+        const permissions = runtimeStatus.permissions;
+        const sinceSample = runtimeStatus.lastSampleAt
+          ? `${Math.max(0, Math.round((Date.now() - runtimeStatus.lastSampleAt) / 1000))} 秒前`
+          : "尚未收到";
+
+        dashboardMic.textContent = permissionText(permissions.microphone);
+        dashboardScreen.textContent =
+          permissions.platform === "darwin" ? permissionText(permissions.screen) : "系統預設允許";
+        dashboardLogin.textContent = permissions.openAtLogin ? "已開啟" : "未開啟";
+        dashboardProfile.textContent = runtimeStatus.profile;
+        dashboardAnalyzer.textContent = runtimeStatus.classifier;
+        dashboardTopSound.textContent = runtimeStatus.lastAudioClass
+          ? `${runtimeStatus.lastAudioClass} · ${(runtimeStatus.lastScore || 0).toFixed(2)} · ${sinceSample}`
+          : runtimeStatus.topLabel;
+        dashboardKeyboardTime.textContent = `${formatSec(buffers.Keyboard_heavy)} / 40:00`;
+        dashboardKeyboardBar.style.setProperty("--progress", `${progressPercent("Keyboard_heavy")}%`);
+        dashboardMouseTime.textContent = `${formatSec(buffers.Mouse_click)} / 10:00`;
+        dashboardMouseBar.style.setProperty("--progress", `${progressPercent("Mouse_click")}%`);
+        dashboardSighTime.textContent = `${formatSec(buffers.Sigh)} / 00:01`;
+        dashboardSighBar.style.setProperty("--progress", `${progressPercent("Sigh")}%`);
+        dashboardAmbient.textContent = runtimeStatus.ambient;
+
+        if (runtimeStatus.lastCategories.length) {
+          dashboardCategories.innerHTML = runtimeStatus.lastCategories
+            .map(
+              (category) =>
+                `<div><span>${escapeHtml(category.name)}</span><strong>${Number(category.score || 0).toFixed(2)}</strong></div>`,
+            )
+            .join("");
+        } else {
+          dashboardCategories.innerHTML = `<div><span>等待 MediaPipe 分析</span><strong>--</strong></div>`;
+        }
+      }
+
+      function setDashboardVisible(visible) {
+        dashboardPanel.hidden = !visible;
+
+        if (visible) {
+          beginInteractive("dashboard");
+          window.echoOverlay.focus();
+          renderDashboard();
+        } else {
+          endInteractive("dashboard");
+        }
+      }
+
+      function toggleDashboard() {
+        setDashboardVisible(dashboardPanel.hidden);
       }
 
       function showProfilePanel() {
@@ -910,6 +1273,7 @@
 
       function setStatus(message) {
         runtimeStatus.classifier = message;
+        renderDashboard();
       }
 
       function formatSec(seconds) {
@@ -929,6 +1293,7 @@
           100,
           (buffers.Mouse_click / RULES.Mouse_click.thresholdSec) * 100,
         );
+        renderDashboard();
       }
 
       function canvasPoint(event) {
@@ -1131,6 +1496,9 @@
 
       function applyAggregation(sample, durationSec) {
         runtimeStatus.topLabel = `${sample.name} ${Number(sample.score).toFixed(2)} -> ${sample.audioClass}`;
+        runtimeStatus.lastAudioClass = sample.audioClass;
+        runtimeStatus.lastSampleAt = Date.now();
+        runtimeStatus.lastScore = Number(sample.score || 0);
 
         if (sample.audioClass === "Keyboard_heavy") {
           buffers.Keyboard_heavy += durationSec;
@@ -1443,6 +1811,10 @@
               return;
             }
 
+            runtimeStatus.lastCategories = categories.slice(0, 6).map((category) => ({
+              name: category.categoryName || category.displayName || "unknown",
+              score: Number(category.score || 0),
+            }));
             applyAggregation(normalizeCategories(categories), inputData.length / audioContext.sampleRate);
           };
 
@@ -1461,9 +1833,15 @@
         try {
           setStatus("正在確認麥克風與螢幕錄製權限");
           const permissions = await window.echoOverlay.requestStartupPermissions();
+          runtimeStatus.permissions = {
+            ...runtimeStatus.permissions,
+            ...permissions,
+          };
 
           if (permissions?.screenNeedsSettings) {
             setStatus("請在系統設定允許 Echo 螢幕錄製，完成後重新開啟 Echo");
+          } else {
+            renderDashboard();
           }
         } catch (error) {
           setStatus(error instanceof Error ? error.message : "權限檢查失敗");
@@ -1523,6 +1901,30 @@
         closeMaskEditor(result);
       });
 
+      dashboardCloseButton.addEventListener("click", () => setDashboardVisible(false));
+      dashboardPermissionButton.addEventListener("click", () => {
+        requestStartupPermissions();
+      });
+      window.echoOverlay.onToggleDashboard(toggleDashboard);
+      window.echoOverlay.onDashboardCommand((payload = {}) => {
+        if (payload.type === "check-permissions") {
+          setDashboardVisible(true);
+          requestStartupPermissions();
+          return;
+        }
+
+        if (payload.type === "show-dashboard") {
+          setDashboardVisible(true);
+          return;
+        }
+
+        if (payload.type === "hide-dashboard") {
+          setDashboardVisible(false);
+          return;
+        }
+
+        toggleDashboard();
+      });
       window.echoOverlay.onDrop(dropCandy);
       profileCard.addEventListener("mouseenter", () => beginInteractive("profile-hover"));
       profileCard.addEventListener("mouseleave", () => {

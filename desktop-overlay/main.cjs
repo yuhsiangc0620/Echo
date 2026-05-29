@@ -6,14 +6,24 @@ const {
   desktopCapturer,
   globalShortcut,
   ipcMain,
+  Menu,
+  nativeImage,
   screen,
   session,
   shell,
   systemPreferences,
+  Tray,
 } = require("electron");
 
 let overlayWindow;
 let interactiveTimer;
+let tray;
+
+const singleInstanceLock = app.requestSingleInstanceLock();
+
+if (!singleInstanceLock) {
+  app.quit();
+}
 
 function wait(ms) {
   return new Promise((resolve) => {
@@ -65,6 +75,8 @@ function enableOpenAtLogin() {
 async function requestStartupPermissions() {
   const permissions = {
     microphone: "unknown",
+    openAtLogin: app.getLoginItemSettings().openAtLogin,
+    platform: process.platform,
     screen: "unknown",
     screenNeedsSettings: false,
   };
@@ -98,6 +110,91 @@ async function requestStartupPermissions() {
   }
 
   return permissions;
+}
+
+function showDashboard() {
+  if (!overlayWindow || overlayWindow.isDestroyed()) {
+    return;
+  }
+
+  overlayWindow.show();
+  overlayWindow.focus();
+  setOverlayInteractive(true);
+  overlayWindow.webContents.send("echo:dashboard-command", { type: "show-dashboard" });
+}
+
+function toggleDashboard() {
+  if (!overlayWindow || overlayWindow.isDestroyed()) {
+    return;
+  }
+
+  overlayWindow.show();
+  overlayWindow.focus();
+  setOverlayInteractive(true);
+  overlayWindow.webContents.send("echo:toggle-dashboard");
+}
+
+function sendDashboardCommand(type) {
+  if (!overlayWindow || overlayWindow.isDestroyed()) {
+    return;
+  }
+
+  overlayWindow.show();
+  overlayWindow.focus();
+  setOverlayInteractive(true);
+  overlayWindow.webContents.send("echo:dashboard-command", { type });
+}
+
+function dropTestCandy() {
+  if (!overlayWindow || overlayWindow.isDestroyed()) {
+    return;
+  }
+
+  overlayWindow.showInactive();
+  setOverlayInteractive(false);
+  overlayWindow.webContents.send("echo:drop", {
+    audioClass: "Keyboard_heavy",
+    audioClasses: ["Keyboard_heavy", "Speech"],
+    soundMix: [
+      { audioClass: "Keyboard_heavy", weight: 0.62 },
+      { audioClass: "Speech", weight: 0.38 },
+    ],
+    wrapped: false,
+  });
+}
+
+function createTray() {
+  const icon = nativeImage.createFromDataURL(
+    "data:image/svg+xml;utf8," +
+      encodeURIComponent(
+        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><path fill='#000' d='M16 2l3 6 6-3-2 7 7 2-7 3 3 7-7-2-3 7-3-7-7 2 3-7-7-3 7-2-2-7 6 3z'/></svg>",
+      ),
+  );
+
+  if (process.platform === "darwin") {
+    icon.setTemplateImage(true);
+  }
+
+  tray = new Tray(icon);
+  tray.setToolTip("Echo");
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      {
+        label: "開啟狀態儀表板",
+        click: showDashboard,
+      },
+      {
+        label: "重新檢查權限",
+        click: () => sendDashboardCommand("check-permissions"),
+      },
+      { type: "separator" },
+      {
+        label: "結束 Echo",
+        click: () => app.quit(),
+      },
+    ]),
+  );
+  tray.on("click", showDashboard);
 }
 
 function createOverlayWindow() {
@@ -135,26 +232,23 @@ function createOverlayWindow() {
   overlayWindow.once("ready-to-show", () => {
     overlayWindow.showInactive();
     setOverlayInteractive(false);
+    setTimeout(showDashboard, 250);
   });
 }
+
+app.on("second-instance", showDashboard);
+
+app.on("activate", showDashboard);
 
 app.whenReady().then(() => {
   enableOpenAtLogin();
   createOverlayWindow();
+  createTray();
+
+  globalShortcut.register("CommandOrControl+Alt+D", toggleDashboard);
+  globalShortcut.register("CommandOrControl+Alt+E", dropTestCandy);
 
   if (process.env.ECHO_DEBUG_SHORTCUTS === "1") {
-    globalShortcut.register("CommandOrControl+Alt+E", () => {
-      overlayWindow?.webContents.send("echo:drop", {
-        audioClass: "Keyboard_heavy",
-        audioClasses: ["Keyboard_heavy", "Speech"],
-        soundMix: [
-          { audioClass: "Keyboard_heavy", weight: 0.62 },
-          { audioClass: "Speech", weight: 0.38 },
-        ],
-        wrapped: false,
-      });
-    });
-
     globalShortcut.register("CommandOrControl+Alt+W", () => {
       overlayWindow?.webContents.send("echo:drop", {
         audioClass: "Sigh",
