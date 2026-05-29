@@ -53,11 +53,17 @@ function setOverlayInteractive(enabled) {
 
 app.whenReady().then(() => {
   session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
-    callback(permission === "media" || permission === "display-capture");
+    if (permission === "display-capture") {
+      callback(true);
+      return;
+    }
+    // For "media" (microphone/camera), defer to the OS so macOS TCC registers
+    // the request and adds Echo to the Microphone privacy list.
+    callback(false);
   });
 
   session.defaultSession.setPermissionCheckHandler(
-    (_webContents, permission) => permission === "media" || permission === "display-capture",
+    (_webContents, permission) => permission === "display-capture",
   );
 });
 

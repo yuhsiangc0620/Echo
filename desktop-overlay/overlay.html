@@ -1804,6 +1804,27 @@
       }
 
       async function startMediaPipeAudioClassifier() {
+        // Request the microphone FIRST. This is the call that makes macOS
+        // register Echo in the Microphone privacy list (and surface the TCC
+        // prompt). It must run before any network-dependent model loading so a
+        // slow/failed download can never block the permission request.
+        let stream;
+        try {
+          setStatus("正在要求麥克風權限");
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              autoGainControl: false,
+              echoCancellation: false,
+              noiseSuppression: false,
+            },
+            video: false,
+          });
+        } catch (error) {
+          setStatus("無法存取麥克風；請在系統設定允許 Echo 使用麥克風後重新檢查權限");
+          runtimeStatus.topLabel = error instanceof Error ? error.message : "microphone unavailable";
+          return;
+        }
+
         try {
           setStatus("載入 MediaPipe Audio Classifier");
           const mediaPipe = await import("../node_modules/@mediapipe/tasks-audio/audio_bundle.mjs").catch(() =>
@@ -1814,17 +1835,12 @@
           );
           const classifier = await mediaPipe.AudioClassifier.createFromOptions(audio, {
             baseOptions: {
-              modelAssetPath: "https://tfhub.dev/google/lite-model/yamnet/classification/tflite/1?lite-format=tflite",
+              // tfhub.dev was retired (now redirects to Kaggle HTML, not the
+              // .tflite). Use MediaPipe's official hosted YAMNet model.
+              modelAssetPath:
+                "https://storage.googleapis.com/mediapipe-models/audio_classifier/yamnet/float32/1/yamnet.tflite",
             },
             maxResults: 8,
-          });
-          const stream = await navigator.mediaDevices.getUserMedia({
-            audio: {
-              autoGainControl: false,
-              echoCancellation: false,
-              noiseSuppression: false,
-            },
-            video: false,
           });
           const audioContext = new AudioContext({ sampleRate: 16000 });
           const source = audioContext.createMediaStreamSource(stream);
@@ -1854,7 +1870,7 @@
 
           setStatus("MediaPipe Audio Classifier 正在本地推論");
         } catch (error) {
-          setStatus("MediaPipe 未啟動；請確認麥克風權限與網路");
+          setStatus("MediaPipe 模型載入失敗；請確認網路後重新檢查");
           runtimeStatus.topLabel = error instanceof Error ? error.message : "classifier unavailable";
         }
       }
