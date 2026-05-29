@@ -26,4 +26,11 @@ contextBridge.exposeInMainWorld("echoOverlay", {
   requestStartupPermissions() {
     return ipcRenderer.invoke("echo:request-startup-permissions");
   },
+  getAppVersion() {
+    return ipcRenderer.invoke("echo:app-version");
+  },
+  openExternal(url) {
+    ipcRenderer.send("echo:open-external", url);
+  },
+  platform: process.platform,
 });

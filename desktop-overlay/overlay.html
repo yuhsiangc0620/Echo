@@ -539,13 +539,50 @@
         border: 0;
         background: var(--ink);
         color: #fff;
-        font-size: 14px;
+        font-size: 13px;
         font-weight: 700;
+        transition: background 0.18s, opacity 0.18s;
       }
+
+      .dashboard-actions button.btn-on  { background: #2db36a; color: #fff; }
+      .dashboard-actions button.btn-off { background: rgba(28,25,22,.12); color: var(--ink); }
 
       .dashboard-actions + .dashboard-muted {
         width: min(calc(100% - 36px), 480px);
         margin: 16px auto 0;
+      }
+
+      .dashboard-update {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        width: min(calc(100% - 36px), 480px);
+        margin: 16px auto 0;
+        padding: 13px 16px;
+        border-radius: 12px;
+        background: rgba(45,179,106,.10);
+        border: 1px solid rgba(45,179,106,.28);
+      }
+
+      .dashboard-update span {
+        flex: 1;
+        font-size: 12.5px;
+        font-weight: 600;
+        color: var(--ink);
+        line-height: 1.4;
+      }
+
+      .dashboard-update button {
+        flex-shrink: 0;
+        height: 34px;
+        padding: 0 14px;
+        border-radius: 999px;
+        border: 0;
+        background: #2db36a;
+        color: #fff;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
       }
 
       .mask-panel {
@@ -894,8 +931,15 @@
           <div id="dashboardCategories" class="dashboard-list"></div>
         </div>
 
+        <div id="dashboardUpdate" class="dashboard-update" hidden>
+          <span id="dashboardUpdateText"></span>
+          <button id="dashboardUpdateButton" type="button">立即下載</button>
+        </div>
+
         <div class="dashboard-actions">
-          <button id="dashboardPermissionButton" type="button">重新檢查權限</button>
+          <button id="dashboardMicButton" type="button" class="btn-off">○ 麥克風</button>
+          <button id="dashboardScreenButton" type="button" class="btn-on">截圖開啟</button>
+          <button id="dashboardPermissionButton" type="button">重新檢查</button>
         </div>
         <p class="dashboard-muted">打開 Echo app 會顯示此面板，也可用 Cmd/Ctrl + Option/Alt + D 開關。</p>
       </section>
@@ -951,6 +995,11 @@
       const dashboardSighBar = document.querySelector("#dashboardSighBar");
       const dashboardAmbient = document.querySelector("#dashboardAmbient");
       const dashboardCategories = document.querySelector("#dashboardCategories");
+      const dashboardMicButton = document.querySelector("#dashboardMicButton");
+      const dashboardScreenButton = document.querySelector("#dashboardScreenButton");
+      const dashboardUpdate = document.querySelector("#dashboardUpdate");
+      const dashboardUpdateText = document.querySelector("#dashboardUpdateText");
+      const dashboardUpdateButton = document.querySelector("#dashboardUpdateButton");
       const maskPanel = document.querySelector("#maskPanel");
       const maskCanvas = document.querySelector("#maskCanvas");
       const maskClearButton = document.querySelector("#maskClearButton");
@@ -1051,6 +1100,13 @@
 
       let lastDropAt = 0;
       let maskImage = null;
+
+      // ── Audio & screen feature state ──────────────────────────────────
+      let activeStream = null;
+      let activeAudioContext = null;
+      let activeScriptNode = null;
+      let micActive = false;
+      let screenCaptureEnabled = true;
       let maskResolve = null;
       let maskDrawing = false;
       let maskLastPoint = null;
@@ -1428,6 +1484,12 @@
       async function wrapCandyWithScreenshot(payload, audioClass, source, card, button) {
         const captureToken = `capture:${Date.now()}`;
 
+        if (!screenCaptureEnabled) {
+          button.textContent = "截圖已關閉";
+          setTimeout(() => { button.textContent = "包裝"; }, 1800);
+          return;
+        }
+
         try {
           button.disabled = true;
           button.textContent = "截圖中";
@@ -1803,6 +1865,66 @@
         }
       }
 
+      const GITHUB_RELEASES_API = "https://api.github.com/repos/yuhsiangc0620/Echo/releases/latest";
+
+      function parseSemver(v) {
+        return String(v || "").replace(/^v/, "").split(".").map(Number);
+      }
+
+      function isNewer(latest, current) {
+        const a = parseSemver(latest);
+        const b = parseSemver(current);
+        for (let i = 0; i < 3; i++) {
+          if ((a[i] || 0) > (b[i] || 0)) return true;
+          if ((a[i] || 0) < (b[i] || 0)) return false;
+        }
+        return false;
+      }
+
+      async function checkForUpdate() {
+        try {
+          const currentVersion = await window.echoOverlay.getAppVersion();
+          const res = await fetch(GITHUB_RELEASES_API, {
+            headers: { Accept: "application/vnd.github+json" },
+          });
+          if (!res.ok) return;
+          const release = await res.json();
+          const latestTag = release.tag_name || "";
+          if (!isNewer(latestTag, currentVersion)) return;
+
+          const platform = window.echoOverlay.platform;
+          const assetPattern = platform === "darwin" ? /arm64-mac\.zip$/ : /x64-win\.zip$/;
+          const asset = (release.assets || []).find((a) => assetPattern.test(a.name));
+          const downloadUrl = asset?.browser_download_url ?? release.html_url;
+
+          dashboardUpdateText.textContent =
+            `新版本 ${latestTag} 可用（目前 v${currentVersion}）— 下載後解壓縮替換即可`;
+          dashboardUpdateButton.onclick = () => window.echoOverlay.openExternal(downloadUrl);
+          dashboardUpdate.hidden = false;
+        } catch {
+          // update check is non-critical, silent fail
+        }
+      }
+
+      function updateActionButtons() {
+        dashboardMicButton.textContent = micActive ? "● 麥克風收聽中" : "○ 麥克風關閉";
+        dashboardMicButton.className = micActive ? "btn-on" : "btn-off";
+        dashboardScreenButton.textContent = screenCaptureEnabled ? "截圖開啟" : "截圖關閉";
+        dashboardScreenButton.className = screenCaptureEnabled ? "btn-on" : "btn-off";
+      }
+
+      function stopMic() {
+        if (activeScriptNode) { activeScriptNode.disconnect(); activeScriptNode = null; }
+        if (activeAudioContext) { void activeAudioContext.close(); activeAudioContext = null; }
+        if (activeStream) { activeStream.getTracks().forEach((t) => t.stop()); activeStream = null; }
+        micActive = false;
+        runtimeStatus.classifier = "麥克風已關閉";
+        runtimeStatus.lastCategories = [];
+        setStatus("麥克風已關閉");
+        renderDashboard();
+        updateActionButtons();
+      }
+
       async function startMediaPipeAudioClassifier() {
         // Request the microphone FIRST. This is the call that makes macOS
         // register Echo in the Microphone privacy list (and surface the TCC
@@ -1842,10 +1964,16 @@
             },
             maxResults: 8,
           });
+          activeStream = stream;
+          micActive = true;
+          updateActionButtons();
+
           const audioContext = new AudioContext({ sampleRate: 16000 });
           const source = audioContext.createMediaStreamSource(stream);
           const scriptNode = audioContext.createScriptProcessor(16384, 1, 1);
           const silentGain = audioContext.createGain();
+          activeAudioContext = audioContext;
+          activeScriptNode = scriptNode;
 
           silentGain.gain.value = 0;
           source.connect(scriptNode);
@@ -1956,6 +2084,17 @@
       });
 
       dashboardCloseButton.addEventListener("click", () => setDashboardVisible(false));
+      dashboardMicButton.addEventListener("click", () => {
+        if (micActive) {
+          stopMic();
+        } else {
+          startMediaPipeAudioClassifier();
+        }
+      });
+      dashboardScreenButton.addEventListener("click", () => {
+        screenCaptureEnabled = !screenCaptureEnabled;
+        updateActionButtons();
+      });
       dashboardPermissionButton.addEventListener("click", () => {
         requestStartupPermissions();
       });
@@ -2016,6 +2155,8 @@
       requestStartupPermissions().finally(() => {
         startMediaPipeAudioClassifier();
       });
+
+      void checkForUpdate();
     </script>
   </body>
 </html>

@@ -357,6 +357,14 @@ ipcMain.handle("echo:capture-screen", async () => {
 
 ipcMain.handle("echo:request-startup-permissions", requestStartupPermissions);
 
+ipcMain.handle("echo:app-version", () => app.getVersion());
+
+ipcMain.on("echo:open-external", (_event, url) => {
+  if (typeof url === "string" && /^https?:\/\//.test(url)) {
+    shell.openExternal(url);
+  }
+});
+
 app.on("window-all-closed", () => {
   app.quit();
 });
