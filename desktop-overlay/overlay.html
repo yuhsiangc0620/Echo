@@ -920,11 +920,11 @@
           <span class="dashboard-section-label">aggregation</span>
           <div class="dashboard-bars">
             <div class="dashboard-bar-row">
-              <header><span>Keyboard_heavy</span><span id="dashboardKeyboardTime">00:00 / 03:00</span></header>
+              <header><span>Keyboard_heavy</span><span id="dashboardKeyboardTime">00:00 / 00:15</span></header>
               <div class="dashboard-bar"><span id="dashboardKeyboardBar"></span></div>
             </div>
             <div class="dashboard-bar-row">
-              <header><span>Mouse_click</span><span id="dashboardMouseTime">00:00 / 03:00</span></header>
+              <header><span>Mouse_click</span><span id="dashboardMouseTime">00:00 / 00:15</span></header>
               <div class="dashboard-bar"><span id="dashboardMouseBar"></span></div>
             </div>
             <div class="dashboard-bar-row">
@@ -1020,15 +1020,13 @@
 
       const RULES = {
         Keyboard_heavy: {
-          thresholdSec: 180,
-          // Detection threshold is handled separately (0.01 raw score).
-          // minScore here is kept only as a fallback reference.
+          thresholdSec: 15,
           minScore: 0.01,
-          labels: ["computer keyboard", "typing", "keyboard", "tap", "tick"],
+          labels: ["computer keyboard", "typing", "typewriter", "keyboard", "tap", "tick", "type"],
           drops: true,
         },
         Mouse_click: {
-          thresholdSec: 180,
+          thresholdSec: 15,
           minScore: 0.01,
           labels: ["click", "mouse", "tick", "tap"],
           drops: true,
@@ -1347,9 +1345,9 @@
         dashboardTopSound.textContent = runtimeStatus.lastAudioClass
           ? `${runtimeStatus.lastAudioClass} · ${(runtimeStatus.lastScore || 0).toFixed(2)} · ${sinceSample}`
           : runtimeStatus.topLabel;
-        dashboardKeyboardTime.textContent = `${formatSec(buffers.Keyboard_heavy)} / 03:00`;
+        dashboardKeyboardTime.textContent = `${formatSec(buffers.Keyboard_heavy)} / 00:15`;
         dashboardKeyboardBar.style.setProperty("--progress", `${progressPercent("Keyboard_heavy")}%`);
-        dashboardMouseTime.textContent = `${formatSec(buffers.Mouse_click)} / 03:00`;
+        dashboardMouseTime.textContent = `${formatSec(buffers.Mouse_click)} / 00:15`;
         dashboardMouseBar.style.setProperty("--progress", `${progressPercent("Mouse_click")}%`);
         dashboardSighTime.textContent = `${formatSec(buffers.Sigh)} / 00:01`;
         dashboardSighBar.style.setProperty("--progress", `${progressPercent("Sigh")}%`);
