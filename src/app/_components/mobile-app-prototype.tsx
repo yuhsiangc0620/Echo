@@ -274,6 +274,24 @@ function toCandyAudioClass(audioClass: string): CandyAudioClass {
   return CANDY_AUDIO_CLASS_SET.has(audioClass) ? (audioClass as CandyAudioClass) : "Keyboard_heavy";
 }
 
+// Build the same multi-stop gradient the desktop candy uses, from the sound mix
+// stored on the candy (its audioClasses). Same colour palette as AUDIO_CONFIG,
+// so a candy here looks identical to the one that dropped on the desktop.
+function candyGradient(classes: CandyAudioClass[]): string | undefined {
+  const colors = classes.filter((cls) => AUDIO_CONFIG[cls]).map((cls) => AUDIO_CONFIG[cls].color);
+  if (colors.length === 0) return undefined;
+  if (colors.length === 1) return `linear-gradient(160deg, ${colors[0]} 0%, ${colors[0]} 100%)`;
+
+  const stops: string[] = [];
+  colors.forEach((color, i) => {
+    const center = (((i + 0.5) / colors.length) * 100).toFixed(1);
+    if (i === 0) stops.push(`${color} 0%`);
+    stops.push(`${color} ${center}%`);
+    if (i === colors.length - 1) stops.push(`${color} 100%`);
+  });
+  return `linear-gradient(160deg, ${stops.join(", ")})`;
+}
+
 function toneForAudioClass(audioClass: string) {
   if (audioClass === "Speech" || audioClass === "Mouse_click") {
     return "chat" as const;
@@ -512,7 +530,9 @@ function ScreenshotCard({
   userName: string;
 }) {
   const [draft, setDraft] = useState("");
+  const [zoomed, setZoomed] = useState(false);
   const primaryAudioClass = screenshot.audioClasses[0];
+  const mainSounds = screenshot.audioClasses.slice(0, 3);
 
   function send() {
     const text = draft.trim();
@@ -523,33 +543,59 @@ function ScreenshotCard({
 
   return (
     <article className="relative pt-4">
-      {/* meta row — age + small tags inline, candy shape on right */}
+      {/* meta row — age + main ambient-sound tags inline, candy shape on right */}
       <header className="mb-3 flex items-center gap-2">
         <span className="echo-eyebrow">{formatAge(screenshot.ageHours)} ago</span>
-        {screenshot.minutes > 0 ? (
-          <span className="rounded-full border border-[var(--rule)] px-1.5 py-px text-[9px] font-medium tracking-wide text-[var(--ink-soft)]">
-            {screenshot.minutes} min
+        {mainSounds.map((cls, i) => (
+          <span
+            key={`${screenshot.id}-sound-${cls}-${i}`}
+            className="rounded-full border border-[var(--rule)] px-1.5 py-px text-[9px] font-medium tracking-wide text-[var(--ink-soft)]"
+          >
+            {AUDIO_CONFIG[cls].short.toLowerCase()}
           </span>
-        ) : null}
-        {primaryAudioClass ? (
-          <span className="rounded-full border border-[var(--rule)] px-1.5 py-px text-[9px] font-medium tracking-wide text-[var(--ink-soft)]">
-            {AUDIO_CONFIG[primaryAudioClass].short.toLowerCase()}
-          </span>
-        ) : null}
+        ))}
         <span className="flex-1" />
-        {primaryAudioClass ? <CandyShape audioClass={primaryAudioClass} size={14} /> : null}
+        {primaryAudioClass ? (
+          <CandyShape
+            audioClass={primaryAudioClass}
+            gradient={candyGradient(screenshot.audioClasses)}
+            size={14}
+          />
+        ) : null}
       </header>
 
-      {/* screenshot — minimal thin border */}
+      {/* screenshot — minimal thin border, tap to spotlight */}
       <div
         className="relative overflow-hidden rounded-md"
         style={{
           aspectRatio: "16 / 11",
           border: "1px solid var(--rule)",
+          cursor: screenshot.screenshotUrl ? "zoom-in" : "default",
+        }}
+        role={screenshot.screenshotUrl ? "button" : undefined}
+        tabIndex={screenshot.screenshotUrl ? 0 : undefined}
+        onClick={() => {
+          if (screenshot.screenshotUrl) setZoomed(true);
         }}
       >
         <WorkScreenshot tone={screenshot.screenshotTone} url={screenshot.screenshotUrl} />
       </div>
+
+      {/* spotlight — full-screen enlarged view; tap the surrounding area to close */}
+      {zoomed && screenshot.screenshotUrl ? (
+        <div
+          className="fixed inset-0 z-[60] grid place-items-center p-5"
+          style={{ background: "rgba(28,25,22,.82)", backdropFilter: "blur(4px)" }}
+          onClick={() => setZoomed(false)}
+        >
+          <img
+            src={screenshot.screenshotUrl}
+            alt=""
+            className="max-h-[90vh] max-w-full rounded-lg object-contain shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          />
+        </div>
+      ) : null}
 
       {/* messages — dash-prefixed prose, never bubbles */}
       {messages.length > 0 ? (
@@ -628,8 +674,8 @@ function JarPreview({
   const tilt = ((hashString(user.id) % 800) / 800 - 0.5) * 5; // ±2.5°
   const slice = user.weeklyScreenshots
     .filter((screenshot) => screenshot.ageHours <= WEEKLY_FEED_HOURS)
-    .map((screenshot) => screenshot.audioClasses[0])
-    .filter((audioClass): audioClass is CandyAudioClass => Boolean(audioClass))
+    .map((screenshot) => screenshot.audioClasses)
+    .filter((classes) => classes.length > 0 && Boolean(classes[0]))
     .slice(0, 8);
   const positions = packedCandyPositions(user.id, slice.length);
   return (
@@ -647,11 +693,11 @@ function JarPreview({
         style={{ transform: `rotate(${active ? 0 : tilt}deg) scale(${active ? 1.04 : 1})` }}
       >
         <Bag width={74} height={96} active={active}>
-          {slice.map((audioClass, index) => {
+          {slice.map((classes, index) => {
             const p = positions[index];
             return (
               <span
-                key={`${user.id}-${audioClass}-${index}`}
+                key={`${user.id}-${classes[0]}-${index}`}
                 className="absolute"
                 style={{
                   left: `${Math.min(75, Math.max(5, p.left))}%`,
@@ -659,7 +705,7 @@ function JarPreview({
                   transform: `rotate(${p.rot * 0.5}deg)`,
                 }}
               >
-                <CandyShape audioClass={audioClass} size={13} />
+                <CandyShape audioClass={classes[0]} gradient={candyGradient(classes)} size={13} />
               </span>
             );
           })}

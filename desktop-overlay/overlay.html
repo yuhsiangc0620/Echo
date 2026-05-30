@@ -679,6 +679,42 @@
         stroke: currentColor;
       }
 
+      .mask-brush {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        padding: 0 10px 0 8px;
+        color: #8d857d;
+      }
+
+      .mask-brush svg {
+        width: 17px;
+        height: 17px;
+        stroke: currentColor;
+        flex-shrink: 0;
+      }
+
+      .mask-brush input[type="range"] {
+        width: 84px;
+        height: 4px;
+        border-radius: 999px;
+        background: rgba(23, 20, 18, 0.16);
+        -webkit-appearance: none;
+        appearance: none;
+        cursor: pointer;
+      }
+
+      .mask-brush input[type="range"]::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: var(--ink);
+        border: 2px solid #fff;
+        box-shadow: 0 1px 4px rgba(23, 20, 18, 0.3);
+      }
+
       .mask-tools .mask-confirm {
         background: var(--ink);
         color: #fff;
@@ -920,11 +956,11 @@
           <span class="dashboard-section-label">aggregation</span>
           <div class="dashboard-bars">
             <div class="dashboard-bar-row">
-              <header><span>Keyboard_heavy</span><span id="dashboardKeyboardTime">00:00 / 00:15</span></header>
+              <header><span>Keyboard_heavy</span><span id="dashboardKeyboardTime">00:00 / 01:00</span></header>
               <div class="dashboard-bar"><span id="dashboardKeyboardBar"></span></div>
             </div>
             <div class="dashboard-bar-row">
-              <header><span>Mouse_click</span><span id="dashboardMouseTime">00:00 / 00:15</span></header>
+              <header><span>Mouse_click</span><span id="dashboardMouseTime">00:00 / 01:00</span></header>
               <div class="dashboard-bar"><span id="dashboardMouseBar"></span></div>
             </div>
             <div class="dashboard-bar-row">
@@ -957,6 +993,13 @@
         <div class="mask-stage">
           <canvas id="maskCanvas"></canvas>
           <div class="mask-tools" aria-label="遮蔽工具">
+            <label class="mask-brush" title="畫筆粗細">
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="m15 5 4 4" />
+                <path d="M13 7 4 16v4h4l9-9" />
+              </svg>
+              <input id="maskBrushSize" type="range" min="0.4" max="2.6" step="0.1" value="1" aria-label="畫筆粗細" />
+            </label>
             <button id="maskClearButton" type="button" aria-label="清除塗鴉" title="清除塗鴉">
               <svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M3 12a9 9 0 1 0 3-6.7" />
@@ -1015,18 +1058,19 @@
       const maskCancelButton = document.querySelector("#maskCancelButton");
       const maskConfirmButton = document.querySelector("#maskConfirmButton");
       const maskSendCandy = document.querySelector("#maskSendCandy");
+      const maskBrushSize = document.querySelector("#maskBrushSize");
 
       const PROFILE_STORAGE_KEY = "echo.profile.v1";
 
       const RULES = {
         Keyboard_heavy: {
-          thresholdSec: 15,
+          thresholdSec: 60,
           minScore: 0.01,
           labels: ["computer keyboard", "typing", "typewriter", "keyboard", "tap", "tick", "type"],
           drops: true,
         },
         Mouse_click: {
-          thresholdSec: 15,
+          thresholdSec: 60,
           minScore: 0.01,
           labels: ["click", "mouse", "tick", "tap"],
           drops: true,
@@ -1137,6 +1181,8 @@
       let maskDrawing = false;
       let maskLastPoint = null;
       let maskSending = false;
+      let maskBrushColor = "#050505";
+      let maskBrushScale = 1;
       let nextCandyId = 0;
 
       const interactiveTokens = new Set();
@@ -1345,9 +1391,9 @@
         dashboardTopSound.textContent = runtimeStatus.lastAudioClass
           ? `${runtimeStatus.lastAudioClass} · ${(runtimeStatus.lastScore || 0).toFixed(2)} · ${sinceSample}`
           : runtimeStatus.topLabel;
-        dashboardKeyboardTime.textContent = `${formatSec(buffers.Keyboard_heavy)} / 00:15`;
+        dashboardKeyboardTime.textContent = `${formatSec(buffers.Keyboard_heavy)} / 01:00`;
         dashboardKeyboardBar.style.setProperty("--progress", `${progressPercent("Keyboard_heavy")}%`);
-        dashboardMouseTime.textContent = `${formatSec(buffers.Mouse_click)} / 00:15`;
+        dashboardMouseTime.textContent = `${formatSec(buffers.Mouse_click)} / 01:00`;
         dashboardMouseBar.style.setProperty("--progress", `${progressPercent("Mouse_click")}%`);
         dashboardSighTime.textContent = `${formatSec(buffers.Sigh)} / 00:01`;
         dashboardSighBar.style.setProperty("--progress", `${progressPercent("Sigh")}%`);
@@ -1440,8 +1486,8 @@
         const context = maskCanvas.getContext("2d");
 
         context.save();
-        context.strokeStyle = "#050505";
-        context.lineWidth = Math.max(28, maskCanvas.width * 0.026);
+        context.strokeStyle = maskBrushColor;
+        context.lineWidth = Math.max(28, maskCanvas.width * 0.026) * maskBrushScale;
         context.lineCap = "round";
         context.lineJoin = "round";
         context.beginPath();
@@ -1503,7 +1549,10 @@
         maskSending = false;
       }
 
-      function openMaskEditor(dataUrl) {
+      function openMaskEditor(dataUrl, brushColor) {
+        // Brush paints with the candy's own colour so the redaction matches the
+        // candy that will drop from this screenshot.
+        maskBrushColor = brushColor || "#050505";
         return new Promise((resolve) => {
           maskResolve = resolve;
           maskImage = new Image();
@@ -1540,7 +1589,7 @@
 
           button.textContent = "遮蔽中";
           endInteractive(captureToken);
-          const masked = await openMaskEditor(capture.dataUrl);
+          const masked = await openMaskEditor(capture.dataUrl, candyColors[audioClass] || "#050505");
 
           if (!masked) {
             button.disabled = false;
@@ -2188,6 +2237,9 @@
         maskLastPoint = null;
       });
 
+      maskBrushSize.addEventListener("input", (event) => {
+        maskBrushScale = Number(event.target.value) || 1;
+      });
       maskClearButton.addEventListener("click", () => {
         if (!maskSending) {
           drawMaskImage();
