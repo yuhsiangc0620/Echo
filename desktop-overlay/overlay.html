@@ -1956,9 +1956,23 @@
 
         overlay.append(card);
         window.setTimeout(() => {
-          card.remove();
-          endInteractive(candyToken);
-        }, 9000);
+          // Auto-dismiss after 10 s: upload as Raw (no screenshot) so the
+          // candy is recorded in the database even without user interaction.
+          card.querySelectorAll("button").forEach((control) => {
+            control.disabled = true;
+          });
+          void uploadCandy({
+            ...payload,
+            audioClass,
+            audioClasses,
+            status: "Raw",
+            mediapipeCategory: source,
+          });
+          playCandyStashAnimation(card).then(() => {
+            card.remove();
+            endInteractive(candyToken);
+          });
+        }, 10000);
       }
 
       async function uploadCandy(payload) {
