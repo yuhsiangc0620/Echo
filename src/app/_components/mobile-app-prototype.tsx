@@ -977,7 +977,7 @@ export default function MobileAppPrototype() {
             </button>
             <Link
               className="echo-press grid size-8 place-items-center"
-              href="/mobile/data"
+              href={profile?.userId ? `/mobile/data?userId=${encodeURIComponent(profile.userId)}` : "/mobile/data"}
               aria-label="Open data page"
               style={{ color: "var(--ink-muted)" }}
             >

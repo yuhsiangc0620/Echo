@@ -56,7 +56,7 @@ function formatLocalDate(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
-async function getTodayFeed(dateStr: string): Promise<DailyCandy[]> {
+async function getTodayFeed(dateStr: string, userId?: string): Promise<DailyCandy[]> {
   const token = process.env.NOTION_TOKEN;
   const databaseId = process.env.NOTION_CANDY_DATABASE_ID;
   if (!token || !databaseId) return [];
@@ -65,6 +65,17 @@ async function getTodayFeed(dateStr: string): Promise<DailyCandy[]> {
   todayStart.setHours(0, 0, 0, 0);
   const todayEnd = new Date(todayStart);
   todayEnd.setHours(23, 59, 59, 999);
+
+  // Scope the chart to a single user when a userId is supplied (User_ID is a
+  // rich_text property in Notion). Without it the chart would aggregate every
+  // user's candies, which is not what the per-user data page wants.
+  const filters: unknown[] = [
+    { timestamp: "created_time", created_time: { on_or_after: todayStart.toISOString() } },
+    { timestamp: "created_time", created_time: { on_or_before: todayEnd.toISOString() } },
+  ];
+  if (userId) {
+    filters.push({ property: "User_ID", rich_text: { equals: userId } });
+  }
 
   try {
     const res = await fetch(`https://api.notion.com/v1/databases/${databaseId}/query`, {
@@ -76,10 +87,7 @@ async function getTodayFeed(dateStr: string): Promise<DailyCandy[]> {
       },
       body: JSON.stringify({
         filter: {
-          and: [
-            { timestamp: "created_time", created_time: { on_or_after: todayStart.toISOString() } },
-            { timestamp: "created_time", created_time: { on_or_before: todayEnd.toISOString() } },
-          ],
+          and: filters,
         },
         sorts: [{ timestamp: "created_time", direction: "ascending" }],
         page_size: 100,
@@ -196,13 +204,16 @@ function timelineStopsFromDrops(drops: Drop[], pointCount: number) {
 
 // ── ActivityChart ─────────────────────────────────────────────────────────────
 
-function ActivityChart({ candies, dateStr, prevDate, nextDate, isToday }: {
+function ActivityChart({ candies, dateStr, prevDate, nextDate, isToday, userId }: {
   candies: DailyCandy[];
   dateStr: string;
   prevDate: string;
   nextDate: string;
   isToday: boolean;
+  userId?: string;
 }) {
+  // Preserve the user scope across day navigation.
+  const userParam = userId ? `&userId=${encodeURIComponent(userId)}` : "";
   const W = 320;
   const H = 100;
   const padX = 8;
@@ -248,14 +259,14 @@ function ActivityChart({ candies, dateStr, prevDate, nextDate, isToday }: {
             {count > 0 ? `${count} 顆糖果` : "無紀錄"}
           </p>
           <Link
-            href={`/mobile/data?date=${prevDate}`}
+            href={`/mobile/data?date=${prevDate}${userParam}`}
             className="grid size-6 place-items-center rounded text-[var(--ink-soft)] hover:text-[var(--ink)] hover:bg-[var(--paper-mid)] transition-colors"
             aria-label="前一天"
           >
             <ChevronLeft className="size-4" strokeWidth={1.5} />
           </Link>
           <Link
-            href={isToday ? "#" : `/mobile/data?date=${nextDate}`}
+            href={isToday ? "#" : `/mobile/data?date=${nextDate}${userParam}`}
             className={`grid size-6 place-items-center rounded transition-colors ${isToday ? "opacity-20 pointer-events-none" : "text-[var(--ink-soft)] hover:text-[var(--ink)] hover:bg-[var(--paper-mid)]"}`}
             aria-label="後一天"
             aria-disabled={isToday}
@@ -417,11 +428,12 @@ function ColorIndex() {
 export default async function MobileDataPage({
   searchParams,
 }: {
-  searchParams: Promise<{ date?: string }>;
+  searchParams: Promise<{ date?: string; userId?: string }>;
 }) {
   const params = await searchParams;
   const todayStr = formatLocalDate(new Date());
   const dateStr = params.date ?? todayStr;
+  const userId = params.userId;
   const isToday = dateStr === todayStr;
 
   const dateObj = parseLocalDate(dateStr);
@@ -432,7 +444,7 @@ export default async function MobileDataPage({
   const prevDate = formatLocalDate(prevObj);
   const nextDate = formatLocalDate(nextObj);
 
-  const candies = await getTodayFeed(dateStr);
+  const candies = await getTodayFeed(dateStr, userId);
 
   return (
     <main className="min-h-screen bg-[var(--paper)] text-[var(--ink)]">
@@ -457,6 +469,7 @@ export default async function MobileDataPage({
             prevDate={prevDate}
             nextDate={nextDate}
             isToday={isToday}
+            userId={userId}
           />
           <ShapeIndex />
           <ColorIndex />
