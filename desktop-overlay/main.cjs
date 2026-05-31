@@ -218,22 +218,17 @@ async function requestStartupPermissions() {
     permissions.micNeedsSettings = permissions.microphone !== "granted";
 
     // ── Screen recording ────────────────────────────────────────────────
-    permissions.screen = systemPreferences.getMediaAccessStatus("screen");
+    // getMediaAccessStatus("screen") is unreliable after app updates — it can
+    // return "not-determined" even when the toggle is ON. Probe with an actual
+    // tiny capture instead: if it returns results the permission is working.
+    const screenSources = await desktopCapturer
+      .getSources({ types: ["screen"], thumbnailSize: { width: 1, height: 1 } })
+      .catch(() => []);
+    permissions.screen = screenSources.length > 0 ? "granted" : "denied";
+    permissions.screenNeedsSettings = permissions.screen !== "granted";
 
-    if (permissions.screen !== "granted") {
-      await desktopCapturer
-        .getSources({
-          types: ["screen"],
-          thumbnailSize: { width: 1, height: 1 },
-        })
-        .catch(() => []);
-      permissions.screen = systemPreferences.getMediaAccessStatus("screen");
-      permissions.screenNeedsSettings = permissions.screen !== "granted";
-    }
-
-    // Open the relevant Settings pane(s) so the user is never left stuck. The
-    // screen pane is opened last so it surfaces on top when both are missing
-    // (screen recording needs a manual toggle + app restart on macOS).
+    // Only open settings for microphone (screen is proven by the capture probe
+    // above; opening the screen pane incorrectly was the source of the bug).
     if (permissions.micNeedsSettings) {
       shell.openExternal("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone");
     }
@@ -472,11 +467,10 @@ ipcMain.on("echo:focus", () => {
 });
 
 ipcMain.handle("echo:capture-screen", async () => {
-  if (process.platform === "darwin" && systemPreferences.getMediaAccessStatus("screen") !== "granted") {
-    shell.openExternal("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture");
-    throw new Error("Echo needs Screen Recording permission before screenshots can be wrapped.");
-  }
-
+  // Don't gate on getMediaAccessStatus() — after an app update (or in some
+  // Electron versions) the API can return "not-determined" / "denied" even when
+  // the System Settings toggle is ON. Instead, just attempt the capture and
+  // open the settings pane only if it actually fails or returns empty results.
   const primaryDisplay = screen.getPrimaryDisplay();
   const scaleFactor = primaryDisplay.scaleFactor || 1;
   const width = Math.round(primaryDisplay.bounds.width * scaleFactor);
@@ -494,7 +488,11 @@ ipcMain.handle("echo:capture-screen", async () => {
     const source = sources.find((candidate) => candidate.display_id === displayId) || sources[0];
 
     if (!source) {
-      throw new Error("No screen source available");
+      // Capture returned nothing — permission is genuinely blocked.
+      if (process.platform === "darwin") {
+        shell.openExternal("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture");
+      }
+      throw new Error("No screen source available — please allow Echo in Screen Recording settings.");
     }
 
     const size = source.thumbnail.getSize();
@@ -504,6 +502,12 @@ ipcMain.handle("echo:capture-screen", async () => {
       width: size.width,
       height: size.height,
     };
+  } catch (err) {
+    // desktopCapturer.getSources threw (permission denied at the OS level).
+    if (process.platform === "darwin" && !(err instanceof Error && err.message.includes("No screen source"))) {
+      shell.openExternal("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture");
+    }
+    throw err;
   } finally {
     overlayWindow?.showInactive();
     overlayWindow?.setAlwaysOnTop(true, "screen-saver");

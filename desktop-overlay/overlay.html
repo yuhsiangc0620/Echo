@@ -1077,39 +1077,43 @@
         },
         Sigh: {
           // Sigh drops immediately on detection — threshold is not used for
-          // accumulation, only as a minimum score gate.
+          // accumulation, only as a minimum score gate. Lowered from 0.55 so
+          // 豌豆 candy drops more readily and balances the keyboard/mouse spam.
           thresholdSec: 0,
-          minScore: 0.55,
+          minScore: 0.4,
           labels: ["sigh"],
           drops: true,
         },
         Speech: {
+          // Ambient minScores lowered (was 0.55) so common office sounds get
+          // recorded as secondary classes more often, giving candy real
+          // multi-colour gradients instead of single-colour blobs.
           thresholdSec: 300,
-          minScore: 0.55,
+          minScore: 0.35,
           labels: ["speech", "conversation", "narration"],
           drops: false,
         },
         Music: {
           thresholdSec: 300,
-          minScore: 0.55,
+          minScore: 0.35,
           labels: ["music", "singing"],
           drops: false,
         },
         Air_conditioner: {
           thresholdSec: 600,
-          minScore: 0.5,
+          minScore: 0.3,
           labels: ["air conditioning", "fan", "hum", "inside, small room"],
           drops: false,
         },
         Traffic: {
           thresholdSec: 300,
-          minScore: 0.55,
+          minScore: 0.4,
           labels: ["traffic", "vehicle", "car", "bus", "motorcycle", "truck"],
           drops: false,
         },
         Door_knock: {
           thresholdSec: 20,
-          minScore: 0.55,
+          minScore: 0.4,
           labels: ["knock", "door", "thump", "bang"],
           drops: false,
         },
@@ -1166,6 +1170,19 @@
       const ACTIVITY_DECAY_RATE = { Keyboard_heavy: 1 / 60, Mouse_click: 1 / 60 };
       const lastActivityAt = { Keyboard_heavy: 0, Mouse_click: 0 };
 
+      // Ambient sounds accumulate from raw scores in parallel (see
+      // accumulateAmbientFromRaw), independent of the winner-takes-all in
+      // normalizeCategories — otherwise keyboard/mouse (minScore 0.01) always
+      // win while typing and ambient buffers never grow, so every candy comes
+      // out single-coloured. The buffer is a bounded "recent presence" window:
+      // it climbs while the sound is heard (capped) and decays once it stops,
+      // so a candy's secondary colours reflect the room over the last minute or
+      // two rather than the whole session.
+      const AMBIENT_CLASSES = ["Speech", "Music", "Air_conditioner", "Traffic", "Door_knock"];
+      const AMBIENT_BUFFER_CAP_SEC = 90;
+      // Drain ~1 accumulated second per 45 idle seconds.
+      const AMBIENT_DECAY_RATE = 1 / 45;
+
       // Window role: the same HTML powers two windows. "#dashboard" is the
       // normal bounded dashboard window (owns the mic classifier + UI); the
       // default is the fullscreen, click-through candy overlay.
@@ -1184,6 +1201,12 @@
       let maskBrushColor = "#050505";
       let maskBrushScale = 1;
       let nextCandyId = 0;
+
+      // Every on-screen candy is registered here so we can (a) keep it alive
+      // until the user explicitly chooses (no auto-dismiss), and (b) clear all
+      // the *other* candies the moment one screenshot is finished — that avoids
+      // the user being asked to screenshot a whole pile of candies at once.
+      const activeCandies = new Map();
 
       const interactiveTokens = new Set();
       let interactiveHeartbeat = null;
@@ -1577,7 +1600,7 @@
         if (!screenCaptureEnabled) {
           button.textContent = "截圖已關閉";
           setTimeout(() => { button.textContent = "包裝"; }, 1800);
-          return;
+          return false;
         }
 
         try {
@@ -1595,7 +1618,7 @@
             button.disabled = false;
             button.textContent = "包裝";
             endInteractive(captureToken);
-            return;
+            return false;
           }
 
           button.textContent = "上傳中";
@@ -1610,10 +1633,12 @@
             screenshotMasked: true,
           });
           card.remove();
+          return true;
         } catch (error) {
           setStatus(`包裝失敗：${error instanceof Error ? error.message : "capture unavailable"}`);
           button.disabled = false;
           button.textContent = "包裝";
+          return false;
         } finally {
           endInteractive(captureToken);
         }
@@ -1733,9 +1758,10 @@
           }
         }
 
-        // Ambient-only classes (Speech, Music, Air_conditioner, etc.)
+        // Ambient buffers are now filled by accumulateAmbientFromRaw() from raw
+        // scores, so we don't increment them here (that would double-count).
+        // We still surface the current winner as the ambient status line.
         if (RULES[sample.audioClass] && !RULES[sample.audioClass].drops && sample.audioClass !== "Silence") {
-          buffers[sample.audioClass] += durationSec;
           runtimeStatus.ambient = `${labels[sample.audioClass]?.[0] || sample.audioClass} ${formatSec(buffers[sample.audioClass])}`;
         }
 
@@ -1760,6 +1786,41 @@
         const mouseScore = scoreFor(categories, RULES.Mouse_click);
         accumulateActivity("Mouse_click", (mouseScore?.score ?? 0) >= 0.01, durationSec);
         maybeDropFromAggregator("Mouse_click");
+      }
+
+      // Ambient presence runs in parallel with keyboard/mouse so the room's
+      // sound is recorded even while typing wins the primary classification.
+      // Each class climbs toward AMBIENT_BUFFER_CAP_SEC while heard above its
+      // minScore and decays once it stops, giving candy a bounded, recent mix
+      // of secondary colours instead of a single dominant tone.
+      function accumulateAmbientFromRaw(categories, durationSec) {
+        for (const audioClass of AMBIENT_CLASSES) {
+          const rule = RULES[audioClass];
+          const match = scoreFor(categories, rule);
+          const present = (match?.score ?? 0) >= rule.minScore;
+
+          if (present) {
+            buffers[audioClass] = Math.min(
+              AMBIENT_BUFFER_CAP_SEC,
+              buffers[audioClass] + durationSec,
+            );
+          } else {
+            buffers[audioClass] = Math.max(
+              0,
+              buffers[audioClass] - durationSec * AMBIENT_DECAY_RATE,
+            );
+          }
+        }
+
+        // Surface the strongest currently-present ambient on the dashboard so
+        // the readout reflects what's actually being recorded, not just the
+        // rare frames where ambient wins the primary classification.
+        const strongest = AMBIENT_CLASSES.filter((audioClass) => buffers[audioClass] > 0).sort(
+          (a, b) => buffers[b] - buffers[a],
+        )[0];
+        if (strongest) {
+          runtimeStatus.ambient = `${labels[strongest]?.[0] || strongest} ${formatSec(buffers[strongest])}`;
+        }
       }
 
       function maybeDropFromAggregator(audioClass) {
@@ -1807,28 +1868,35 @@
         });
       }
 
-      function soundMixForCandy(primaryAudioClass, audioClasses, durationSec) {
-        const uniqueClasses = [...new Set([primaryAudioClass, ...(audioClasses || [])])].filter(
-          (audioClass) => candyColors[audioClass],
+      // The primary class keeps a dominant, fixed share so the candy's identity
+      // colour stays readable (a Sigh candy still looks like a Sigh candy even
+      // when the room is full of speech). Secondary ambient/work classes split
+      // the remaining share by their relative buffer presence, adding tint and
+      // variety without overpowering the primary.
+      const PRIMARY_COLOUR_SHARE = 0.62;
+
+      function soundMixForCandy(primaryAudioClass, audioClasses, _durationSec) {
+        const secondaries = [...new Set(audioClasses || [])].filter(
+          (audioClass) =>
+            audioClass !== primaryAudioClass &&
+            candyColors[audioClass] &&
+            buffers[audioClass] > 0,
         );
 
-        const rawMix = uniqueClasses.map((audioClass) => {
-          const value =
-            audioClass === primaryAudioClass
-              ? durationSec || buffers[audioClass] || 1
-              : buffers[audioClass] || 1;
+        if (!candyColors[primaryAudioClass] || secondaries.length === 0) {
+          return [{ audioClass: primaryAudioClass, weight: 1 }];
+        }
 
-          return {
+        const secondaryTotal =
+          secondaries.reduce((sum, audioClass) => sum + Math.max(0.01, buffers[audioClass]), 0) || 1;
+
+        return [
+          { audioClass: primaryAudioClass, weight: PRIMARY_COLOUR_SHARE },
+          ...secondaries.map((audioClass) => ({
             audioClass,
-            value: Math.max(0.01, value),
-          };
-        });
-        const total = rawMix.reduce((sum, sample) => sum + sample.value, 0) || 1;
-
-        return rawMix.map((sample) => ({
-          audioClass: sample.audioClass,
-          weight: sample.value / total,
-        }));
+            weight: (1 - PRIMARY_COLOUR_SHARE) * (Math.max(0.01, buffers[audioClass]) / secondaryTotal),
+          })),
+        ];
       }
 
       function gradientFromSoundMix(mix) {
@@ -1890,6 +1958,44 @@
         });
       }
 
+      // Record a candy as Raw (no screenshot) and remove it from the overlay.
+      // Used both when the user picks "不要" on a single candy and when one
+      // screenshot finishes and the remaining candies are swept away together.
+      function dismissCandyRaw(entry) {
+        if (!entry || entry.handled) {
+          return;
+        }
+        entry.handled = true;
+        activeCandies.delete(entry.candyToken);
+
+        entry.card.querySelectorAll("button").forEach((control) => {
+          control.disabled = true;
+        });
+
+        void uploadCandy({
+          ...entry.payload,
+          audioClass: entry.audioClass,
+          audioClasses: entry.audioClasses,
+          status: "Raw",
+          mediapipeCategory: entry.source,
+        });
+
+        playCandyStashAnimation(entry.card).then(() => {
+          entry.card.remove();
+          endInteractive(entry.candyToken);
+        });
+      }
+
+      // After one candy is screenshotted, sweep away every other on-screen
+      // candy at the same time so the user isn't prompted to screenshot a pile.
+      function clearOtherCandies(exceptToken) {
+        for (const entry of [...activeCandies.values()]) {
+          if (entry.candyToken !== exceptToken) {
+            dismissCandyRaw(entry);
+          }
+        }
+      }
+
       function dropCandy(payload = {}) {
         const audioClass = payload.audioClass || "Keyboard_heavy";
         const [, source] = labels[audioClass] || labels.Keyboard_heavy;
@@ -1925,54 +2031,39 @@
           card.querySelector(".candy").style.setProperty("--candy-gradient", candyGradient);
         }
 
+        const entry = { card, payload, audioClass, audioClasses, source, candyToken, handled: false };
+        activeCandies.set(candyToken, entry);
+
         card.addEventListener("mouseenter", () => beginInteractive(candyToken));
         card.addEventListener("mouseleave", () => endInteractive(candyToken));
         card.querySelectorAll("button").forEach((button) => {
           button.addEventListener("click", async () => {
-            const status = button.dataset.action === "wrap" ? "Wrapped" : "Raw";
-
-            if (status === "Wrapped") {
-              await wrapCandyWithScreenshot(payload, audioClass, source, card, button);
-              endInteractive(candyToken);
+            if (entry.handled) {
               return;
             }
 
-            card.querySelectorAll("button").forEach((control) => {
-              control.disabled = true;
-            });
-            const uploadPromise = uploadCandy({
-              ...payload,
-              audioClass,
-              audioClasses,
-              status,
-              mediapipeCategory: source,
-            });
-            await playCandyStashAnimation(card);
-            card.remove();
-            endInteractive(candyToken);
-            await uploadPromise;
+            if (button.dataset.action === "wrap") {
+              const wrapped = await wrapCandyWithScreenshot(payload, audioClass, source, card, button);
+              endInteractive(candyToken);
+              // Only once the screenshot is actually finished do we sweep away
+              // the rest — a cancelled capture leaves every candy in place.
+              if (wrapped) {
+                entry.handled = true;
+                activeCandies.delete(candyToken);
+                clearOtherCandies(candyToken);
+              }
+              return;
+            }
+
+            // "不要": record this one as Raw and remove just it.
+            dismissCandyRaw(entry);
           });
         });
 
+        // No auto-dismiss: a candy stays put until the user decides. The only
+        // way a candy leaves on its own is when another candy's screenshot
+        // finishes (see clearOtherCandies).
         overlay.append(card);
-        window.setTimeout(() => {
-          // Auto-dismiss after 10 s: upload as Raw (no screenshot) so the
-          // candy is recorded in the database even without user interaction.
-          card.querySelectorAll("button").forEach((control) => {
-            control.disabled = true;
-          });
-          void uploadCandy({
-            ...payload,
-            audioClass,
-            audioClasses,
-            status: "Raw",
-            mediapipeCategory: source,
-          });
-          playCandyStashAnimation(card).then(() => {
-            card.remove();
-            endInteractive(candyToken);
-          });
-        }, 10000);
       }
 
       async function uploadCandy(payload) {
@@ -2182,6 +2273,7 @@
             }));
             const durationSec = inputData.length / audioContext.sampleRate;
             accumulateFromRaw(categories, durationSec);
+            accumulateAmbientFromRaw(categories, durationSec);
             applyAggregation(normalizeCategories(categories), durationSec);
           };
 

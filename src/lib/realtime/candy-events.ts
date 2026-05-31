@@ -1,7 +1,9 @@
 type CandyRealtimeEvent = {
   candyId: string;
   userId: string;
-  status: "Wrapped";
+  // Both Raw and Wrapped candies broadcast so the mobile bag refreshes for any
+  // new candy; only Wrapped ones also fire a push notification.
+  status: "Raw" | "Wrapped";
   createdAt: string;
 };
 

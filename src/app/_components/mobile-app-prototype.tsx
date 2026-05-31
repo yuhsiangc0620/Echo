@@ -13,11 +13,13 @@ import Link from "next/link";
 import {
   type FormEvent,
   type PointerEvent,
+  useEffect,
   useMemo,
   useRef,
   useState,
   useSyncExternalStore,
 } from "react";
+import { createPortal } from "react-dom";
 import CandyShape from "@/app/_components/candy-shape";
 import { AUDIO_CLASSES, AUDIO_CONFIG, type CandyAudioClass } from "@/lib/candy/catalog";
 import { type JarUser, type WeeklyScreenshot } from "@/lib/mobile/mock-data";
@@ -257,16 +259,17 @@ function useWeeklyFeed() {
 }
 
 function weeklyScreenshotsFor(user: JarUser) {
+  // The waterfall shows wrapped candies only — those with a real screenshot.
+  // Raw candies still live in the bag (see JarPreview / liveUsersFromFeed).
   return user.weeklyScreenshots
-    .filter((screenshot) => screenshot.ageHours <= WEEKLY_FEED_HOURS)
+    .filter((screenshot) => screenshot.screenshotUrl && screenshot.ageHours <= WEEKLY_FEED_HOURS)
     .sort((a, b) => a.ageHours - b.ageHours);
 }
 
 function formatAge(ageHours: number) {
-  if (ageHours < 24) {
-    return `${Math.max(1, Math.round(ageHours))}h`;
-  }
-
+  const totalMinutes = Math.round(ageHours * 60);
+  if (totalMinutes < 60) return `${Math.max(1, totalMinutes)}m`;
+  if (ageHours < 24) return `${Math.round(ageHours)}h`;
   return `${Math.round(ageHours / 24)}d`;
 }
 
@@ -315,11 +318,11 @@ function nameFromUserId(userId: string, profile: EchoProfile | null) {
 function liveUsersFromFeed(items: WeeklyFeedApiItem[], profile: EchoProfile | null): JarUser[] {
   const grouped = new Map<string, WeeklyFeedApiItem[]>();
 
-  items
-    .filter((item) => item.screenshotUrl)
-    .forEach((item) => {
-      grouped.set(item.userId, [...(grouped.get(item.userId) ?? []), item]);
-    });
+  // Every candy counts toward the bag — Raw (no screenshot) included. The
+  // screenshot waterfall filters by screenshotUrl separately (weeklyScreenshotsFor).
+  items.forEach((item) => {
+    grouped.set(item.userId, [...(grouped.get(item.userId) ?? []), item]);
+  });
 
   return Array.from(grouped.entries()).map(([userId, userItems], index) => {
     const accent = ["#ff8aa6", "#92c8f3", "#88e0b0", "#ffc878", "#b896f5"][index % 5];
@@ -516,6 +519,54 @@ function packedCandyPositions(seed: string, count: number) {
   return positions;
 }
 
+// ── SpotlightPortal ───────────────────────────────────────────────────────────
+// Renders into document.body so CSS transforms on ancestor elements don't clip
+// the overlay. Animates in/out with a simple opacity + scale transition.
+
+function SpotlightPortal({ url, onClose }: { url: string | null | undefined; onClose: () => void }) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+  if (!mounted || !url) return null;
+
+  return createPortal(
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 9999,
+        display: "grid",
+        placeItems: "center",
+        padding: "20px",
+        background: "rgba(18,16,14,0.90)",
+        backdropFilter: "blur(6px)",
+        WebkitBackdropFilter: "blur(6px)",
+        animation: "echo-spotlight-in 180ms ease",
+      }}
+      onClick={onClose}
+    >
+      <img
+        src={url}
+        alt=""
+        style={{
+          maxHeight: "90svh",
+          maxWidth: "100%",
+          borderRadius: "12px",
+          objectFit: "contain",
+          boxShadow: "0 24px 80px rgba(0,0,0,0.6)",
+        }}
+        onClick={(e) => e.stopPropagation()}
+      />
+      <style>{`
+        @keyframes echo-spotlight-in {
+          from { opacity: 0; }
+          to   { opacity: 1; }
+        }
+      `}</style>
+    </div>,
+    document.body,
+  );
+}
+
 function ScreenshotCard({
   screenshot,
   messages,
@@ -581,21 +632,11 @@ function ScreenshotCard({
         <WorkScreenshot tone={screenshot.screenshotTone} url={screenshot.screenshotUrl} />
       </div>
 
-      {/* spotlight — full-screen enlarged view; tap the surrounding area to close */}
-      {zoomed && screenshot.screenshotUrl ? (
-        <div
-          className="fixed inset-0 z-[60] grid place-items-center p-5"
-          style={{ background: "rgba(28,25,22,.82)", backdropFilter: "blur(4px)" }}
-          onClick={() => setZoomed(false)}
-        >
-          <img
-            src={screenshot.screenshotUrl}
-            alt=""
-            className="max-h-[90vh] max-w-full rounded-lg object-contain shadow-2xl"
-            onClick={(event) => event.stopPropagation()}
-          />
-        </div>
-      ) : null}
+      {/* spotlight — portal to body so transform ancestors don't clip it */}
+      <SpotlightPortal
+        url={zoomed ? screenshot.screenshotUrl : null}
+        onClose={() => setZoomed(false)}
+      />
 
       {/* messages — dash-prefixed prose, never bubbles */}
       {messages.length > 0 ? (
@@ -999,7 +1040,7 @@ export default function MobileAppPrototype() {
                 {activeWeeklyScreenshots.map((screenshot, i) => (
                   <div
                     key={screenshot.id}
-                    className="echo-rise border-t border-[var(--rule)] pb-3"
+                    className="echo-rise pb-3"
                     style={{ ["--i" as keyof React.CSSProperties as string]: i } as React.CSSProperties}
                   >
                     <ScreenshotCard

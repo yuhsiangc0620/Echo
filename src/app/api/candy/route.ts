@@ -444,14 +444,11 @@ async function getWeeklyFeedFromNotion() {
       "Notion-Version": NOTION_DATABASE_QUERY_VERSION,
     },
     body: JSON.stringify({
+      // Raw (un-wrapped) candies belong in the candy bag too, so we no longer
+      // filter on Status === "Wrapped" here. The screenshot waterfall on the
+      // client keeps its own screenshotUrl filter; the bag uses every candy.
       filter: {
         and: [
-          {
-            property: "Status",
-            status: {
-              equals: "Wrapped",
-            },
-          },
           {
             timestamp: "created_time",
             created_time: {
@@ -480,7 +477,9 @@ async function getWeeklyFeedFromNotion() {
   return {
     configured: true,
     since,
-    items: pages.map(mapNotionPageToWeeklyFeedItem).filter((item) => Boolean(item.screenshotUrl)),
+    // Keep every candy (Raw + Wrapped); the client splits them — all candies
+    // fill the bag, only ones with a screenshot appear in the waterfall.
+    items: pages.map(mapNotionPageToWeeklyFeedItem),
   };
 }
 
@@ -701,15 +700,15 @@ export async function POST(request: Request) {
           error: error instanceof Error ? error.message : "Push broadcast failed",
         }))
       : null;
-  const realtimeResult =
-    status === "Wrapped"
-      ? broadcastCandyEvent({
-          candyId,
-          userId: payload.userId,
-          status,
-          createdAt: new Date().toISOString(),
-        })
-      : null;
+  // Broadcast for both Raw and Wrapped so the mobile candy bag refreshes the
+  // moment any candy lands — un-wrapped candies belong in the bag too. The
+  // push notification above stays Wrapped-only so Raw candies don't buzz phones.
+  const realtimeResult = broadcastCandyEvent({
+    candyId,
+    userId: payload.userId,
+    status,
+    createdAt: new Date().toISOString(),
+  });
 
   return jsonResponse(
     {
