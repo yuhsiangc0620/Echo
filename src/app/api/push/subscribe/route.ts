@@ -40,10 +40,24 @@ export async function POST(request: Request) {
       p256dh: subscription.keys.p256dh,
     },
   };
-  const result = registerPushSubscription(payload.userId, normalizedSubscription);
 
-  return Response.json({
-    ok: true,
-    subscribers: result.count,
-  });
+  try {
+    const result = await registerPushSubscription(payload.userId, normalizedSubscription);
+
+    return Response.json({
+      ok: true,
+      subscribers: result.count,
+      // "memory" here in production means NOTION_PUSH_DATABASE_ID is missing —
+      // the subscription won't be visible to other serverless instances.
+      storage: result.storage,
+    });
+  } catch (error) {
+    return Response.json(
+      {
+        ok: false,
+        error: error instanceof Error ? error.message : "Could not store subscription.",
+      },
+      { status: 500 },
+    );
+  }
 }
