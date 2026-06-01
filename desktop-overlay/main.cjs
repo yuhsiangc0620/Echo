@@ -218,14 +218,26 @@ async function requestStartupPermissions() {
     permissions.micNeedsSettings = permissions.microphone !== "granted";
 
     // ── Screen recording ────────────────────────────────────────────────
-    // getMediaAccessStatus("screen") is unreliable after app updates — it can
-    // return "not-determined" even when the toggle is ON. Probe with an actual
-    // tiny capture instead: if it returns results the permission is working.
-    const screenSources = await desktopCapturer
-      .getSources({ types: ["screen"], thumbnailSize: { width: 1, height: 1 } })
-      .catch(() => []);
-    permissions.screen = screenSources.length > 0 ? "granted" : "denied";
-    permissions.screenNeedsSettings = permissions.screen !== "granted";
+    // Trust the OS permission state first: once Echo is enabled in System
+    // Settings › Screen Recording, getMediaAccessStatus("screen") reliably
+    // reports "granted". The desktopCapturer probe is only a *fallback* for the
+    // rare post-update state where the toggle is on but the status still reads
+    // "not-determined". Relying on the probe alone produced false "需要到系統
+    // 設定開啟" reports even when the permission was clearly granted, because
+    // getSources() can transiently return an empty array (wrong call timing,
+    // black thumbnails) on a perfectly-authorised app.
+    const screenStatus = systemPreferences.getMediaAccessStatus("screen");
+    let screenGranted = screenStatus === "granted";
+
+    if (!screenGranted) {
+      const screenSources = await desktopCapturer
+        .getSources({ types: ["screen"], thumbnailSize: { width: 1, height: 1 } })
+        .catch(() => []);
+      screenGranted = screenSources.length > 0;
+    }
+
+    permissions.screen = screenGranted ? "granted" : "denied";
+    permissions.screenNeedsSettings = !screenGranted;
 
     // Only open settings for microphone (screen is proven by the capture probe
     // above; opening the screen pane incorrectly was the source of the bug).
