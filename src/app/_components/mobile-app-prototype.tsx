@@ -784,6 +784,17 @@ export default function MobileAppPrototype() {
   const weeklyFeed = useWeeklyFeed();
   const [nameDraft, setNameDraft] = useState("");
   const [pushStatus, setPushStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
+
+  // On mount, check if push is already subscribed so the Bell icon shows the
+  // correct state without requiring the user to tap it again after a refresh.
+  useEffect(() => {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+    navigator.serviceWorker.ready.then((reg) => {
+      reg.pushManager.getSubscription().then((sub) => {
+        if (sub) setPushStatus("ready");
+      }).catch(() => {/* ignore */});
+    }).catch(() => {/* ignore */});
+  }, []);
   const [messages, setMessages] = useState<Record<string, string[]>>({});
   const liveUsers = useMemo(() => liveUsersFromFeed(weeklyFeed.items, profile), [profile, weeklyFeed.items]);
   const users = useMemo(() => {

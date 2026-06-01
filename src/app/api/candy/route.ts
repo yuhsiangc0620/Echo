@@ -682,16 +682,24 @@ export async function POST(request: Request) {
     );
   }
 
+  // Derive a readable display name from the userId (e.g. "user_yu-hsiang" → "yu hsiang").
+  const displayName = (payload.userId ?? "")
+    .replace(/^user_/, "")
+    .replace(/-/g, " ")
+    .trim() || "有人";
+
   const notificationResult =
     status === "Wrapped"
       ? await broadcastPushNotification({
-          title: "Echo",
-          body: `${payload.userId ?? "有人"} 包裝了一顆工作糖果。`,
+          title: "Echo 🍬",
+          body: `${displayName} 包裝了一顆工作糖果。`,
           data: {
             candyId,
-            userId: payload.userId,
+            userId: payload.userId ?? "",
             status,
           },
+          // Don't notify the person who just dropped their own candy.
+          excludeUserId: payload.userId,
         }).catch((error) => ({
           configured: true,
           sent: 0,

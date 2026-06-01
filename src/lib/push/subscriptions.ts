@@ -11,6 +11,9 @@ type PushPayload = {
   title: string;
   body: string;
   data?: Record<string, string | number | boolean | null>;
+  // When set, the notification is sent to all subscribers *except* this user
+  // (so the person who dropped a candy doesn't notify themselves).
+  excludeUserId?: string;
 };
 
 const globalForPush = globalThis as typeof globalThis & {
@@ -66,8 +69,12 @@ export async function broadcastPushNotification(payload: PushPayload) {
 
   webPush.setVapidDetails(vapid.subject, vapid.publicKey, vapid.privateKey);
 
+  const targets = Array.from(subscriptions.values()).filter(
+    ({ userId }) => !payload.excludeUserId || userId !== payload.excludeUserId,
+  );
+
   const results = await Promise.allSettled(
-    Array.from(subscriptions.values()).map(async ({ subscription }) => {
+    targets.map(async ({ subscription }) => {
       try {
         await webPush.sendNotification(subscription, JSON.stringify(payload));
 

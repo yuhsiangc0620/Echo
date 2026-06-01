@@ -8,7 +8,7 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("push", (event) => {
   let payload = {
-    title: "Echo",
+    title: "Echo 🍬",
     body: "有一顆包裝糖果剛掉進網路。",
     data: {},
   };
@@ -25,11 +25,13 @@ self.addEventListener("push", (event) => {
   }
 
   event.waitUntil(
-    self.registration.showNotification(payload.title || "Echo", {
+    self.registration.showNotification(payload.title || "Echo 🍬", {
       body: payload.body || "有一顆包裝糖果剛掉進網路。",
       icon: "/echo-icon-192.png",
       badge: "/echo-icon-192.png",
-      tag: "echo-candy-drop",
+      // Use a unique tag per candy so multiple candies each show their own
+      // notification rather than collapsing into one.
+      tag: `echo-candy-${payload.data?.candyId || Date.now()}`,
       data: payload.data || {},
     }),
   );
@@ -38,15 +40,18 @@ self.addEventListener("push", (event) => {
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
 
+  // Open the candy bag page so the user sees the new candy directly.
+  const targetUrl = "/mobile";
+
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
-      const client = clients.find((candidate) => "focus" in candidate);
-
-      if (client) {
-        return client.focus();
+      // If the app is already open, focus it and navigate.
+      const existing = clients.find((c) => c.url.includes("/mobile") && "focus" in c);
+      if (existing) {
+        return existing.focus();
       }
-
-      return self.clients.openWindow("/");
+      // Otherwise open a new tab.
+      return self.clients.openWindow(targetUrl);
     }),
   );
 });
