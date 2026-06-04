@@ -327,6 +327,22 @@ function dropTestCandy() {
   });
 }
 
+// Drop a single-class candy of the given audio class via global shortcut.
+function dropCandyClass(audioClass) {
+  if (!overlayWindow || overlayWindow.isDestroyed()) {
+    return;
+  }
+
+  overlayWindow.showInactive();
+  setOverlayInteractive(false);
+  overlayWindow.webContents.send("echo:drop", {
+    audioClass,
+    audioClasses: [audioClass],
+    soundMix: [{ audioClass, weight: 1 }],
+    wrapped: false,
+  });
+}
+
 function createTray() {
   const icon = nativeImage.createFromDataURL(
     "data:image/svg+xml;utf8," +
@@ -452,6 +468,9 @@ app.whenReady().then(() => {
 
   globalShortcut.register("CommandOrControl+Alt+D", toggleDashboard);
   globalShortcut.register("CommandOrControl+Alt+E", dropTestCandy);
+  // Manual candy drops: 滑鼠糖 (Mouse_click) / 嘆氣糖 (Sigh).
+  globalShortcut.register("CommandOrControl+Alt+M", () => dropCandyClass("Mouse_click"));
+  globalShortcut.register("CommandOrControl+Alt+S", () => dropCandyClass("Sigh"));
 
   if (process.env.ECHO_DEBUG_SHORTCUTS === "1") {
     globalShortcut.register("CommandOrControl+Alt+W", () => {

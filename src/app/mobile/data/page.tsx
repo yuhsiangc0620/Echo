@@ -460,6 +460,12 @@ export default async function MobileDataPage({
           <h1 className="text-[17px] font-semibold tracking-[-0.02em] text-[var(--ink)] lowercase">
             candy <span className="echo-underline">index.</span>
           </h1>
+          <Link
+            className="echo-press absolute right-3 text-[11px] font-medium text-[var(--ink-soft)] transition-colors hover:text-[var(--ink)]"
+            href="/mobile/data/overview"
+          >
+            全部數據
+          </Link>
         </header>
 
         <div className="space-y-9 px-5 pt-4 pb-10">
