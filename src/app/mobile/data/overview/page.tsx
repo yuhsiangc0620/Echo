@@ -343,6 +343,10 @@ function ActivityCurve({ user }: { user: UserBucket }) {
 
   return (
     <div className="relative h-full w-full">
+      <div className="absolute left-2 top-2 z-10 rounded-[4px] border border-[var(--rule)] bg-[rgba(255,255,255,0.78)] px-2.5 py-1 backdrop-blur-sm">
+        <span className="text-[12px] font-semibold text-[var(--ink)]">{displayNameFor(user.userId)}</span>
+      </div>
+
       <svg viewBox={`0 0 ${W} ${H}`} className="block h-full w-full" aria-hidden>
         <defs>
           <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="0">
@@ -408,7 +412,7 @@ function ActivityCurve({ user }: { user: UserBucket }) {
         ))}
       </svg>
 
-      {drops.slice(0, 18).map((drop, k) => {
+      {drops.map((drop, k) => {
         const pointIndex = Math.round(drop.x * (n - 1));
         const x = padX + drop.x * innerW;
         const y = ys[pointIndex];
@@ -434,7 +438,6 @@ function ActivityCurve({ user }: { user: UserBucket }) {
 
       {drops
         .filter((drop) => drop.screenshotUrl)
-        .slice(0, 24)
         .map((drop, k) => {
           const x = padX + drop.x * innerW;
           const y = baseY + 15 + (k % 2) * 15;
@@ -479,13 +482,13 @@ function UserRow({ user }: { user: UserBucket }) {
   const shotCount = user.days.reduce((sum, d) => sum + d.candies.filter((c) => c.screenshotUrl).length, 0);
 
   return (
-    <div className="grid min-h-0 grid-cols-[210px_1fr] border-t border-[var(--rule)]">
-      <div className="flex items-center gap-4 px-7">
-        <div className="grid size-[52px] shrink-0 place-items-center rounded-full border border-[var(--line)] bg-white">
-          <span className="font-display text-[18px] text-[var(--ink)]">{initialsFor(user.userId)}</span>
+    <div className="grid min-h-0 grid-cols-[280px_1fr] border-t border-[var(--rule)]">
+      <div className="flex items-center gap-4 bg-[rgba(255,255,255,0.48)] px-7">
+        <div className="grid size-[58px] shrink-0 place-items-center rounded-full border border-[var(--line)] bg-white">
+          <span className="font-display text-[20px] text-[var(--ink)]">{initialsFor(user.userId)}</span>
         </div>
         <div className="min-w-0">
-          <h2 className="truncate text-[22px] font-semibold tracking-normal text-[var(--ink)]">
+          <h2 className="truncate text-[28px] font-semibold tracking-normal text-[var(--ink)]">
             {displayNameFor(user.userId)}
           </h2>
           <p className="mt-1 text-[12px] font-semibold uppercase tracking-[0.12em] text-[var(--ink-soft)]">
@@ -538,9 +541,9 @@ export default async function DataOverviewPage() {
         >
           <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(28,25,22,0.024)_1px,transparent_1px),linear-gradient(rgba(28,25,22,0.02)_1px,transparent_1px)] bg-[size:96px_96px]" />
           <div className="relative grid h-full grid-rows-[62px_1fr] p-0">
-            <div className="grid grid-cols-[210px_1fr] border-b border-[var(--rule)] bg-[rgba(255,255,255,0.54)]">
+            <div className="grid grid-cols-[280px_1fr] border-b border-[var(--rule)] bg-[rgba(255,255,255,0.54)]">
               <div className="flex items-center px-7 text-[12px] font-semibold uppercase tracking-[0.18em] text-[var(--ink-soft)]">
-                user
+                user name
               </div>
               <div className="grid grid-cols-5">
                 {DATE_COLUMNS.map((dateStr) => (
