@@ -43,6 +43,12 @@ type UserBucket = {
   dayMap: Map<string, DayBucket>;
 };
 
+type EnvironmentSegment = {
+  cls: CandyAudioClass;
+  count: number;
+  share: number;
+};
+
 type NotionFetchResult = {
   candies: OverviewCandy[];
   error: string | null;
@@ -102,6 +108,9 @@ const SHAPE_BY_CLASS: Partial<Record<CandyAudioClass, Exclude<CandyShapeKind, "c
   Mouse_click: "donut",
 };
 
+const ENVIRONMENT_CLASSES = AUDIO_CLASSES.filter((cls) => AUDIO_CONFIG[cls].role !== "work");
+const ENVIRONMENT_CLASS_SET = new Set<CandyAudioClass>(ENVIRONMENT_CLASSES);
+
 function shapeFor(cls: CandyAudioClass): CandyShapeKind {
   return SHAPE_BY_CLASS[cls] ?? "circle";
 }
@@ -115,6 +124,49 @@ function gradientFromSoundMix(tones: SoundMix[]) {
     return [`${color} ${f(start * 100)}%`, `${color} ${f(cursor * 100)}%`];
   });
   return `linear-gradient(180deg, ${stops.join(", ")})`;
+}
+
+function environmentSegmentsFor(user: UserBucket): EnvironmentSegment[] {
+  const counts = new Map<CandyAudioClass, number>();
+
+  for (const day of user.days) {
+    for (const candy of day.candies) {
+      const envClasses = Array.from(
+        new Set(
+          candy.audioClasses
+            .filter(isValidAudioClass)
+            .filter((cls) => ENVIRONMENT_CLASS_SET.has(cls)),
+        ),
+      );
+
+      for (const cls of envClasses) {
+        counts.set(cls, (counts.get(cls) ?? 0) + 1);
+      }
+    }
+  }
+
+  const total = Array.from(counts.values()).reduce((sum, count) => sum + count, 0);
+  if (total === 0) return [];
+
+  return ENVIRONMENT_CLASSES.map((cls) => ({
+    cls,
+    count: counts.get(cls) ?? 0,
+    share: (counts.get(cls) ?? 0) / total,
+  })).filter((segment) => segment.count > 0);
+}
+
+function donutGradientFromSegments(segments: EnvironmentSegment[]) {
+  if (!segments.length) return "conic-gradient(var(--paper-mid) 0deg 360deg)";
+
+  let cursor = 0;
+  const stops = segments.flatMap((segment) => {
+    const start = cursor;
+    cursor += segment.share * 360;
+    const color = AUDIO_CONFIG[segment.cls].color;
+    return [`${color} ${f(start)}deg`, `${color} ${f(cursor)}deg`];
+  });
+
+  return `conic-gradient(${stops.join(", ")})`;
 }
 
 // ── Notion fetch (all candies, paginated) ─────────────────────────────────────
@@ -478,23 +530,74 @@ function ActivityCurve({ user }: { user: UserBucket }) {
   );
 }
 
+function EnvironmentDonut({ user }: { user: UserBucket }) {
+  const segments = environmentSegmentsFor(user);
+  const legendSegments = [...segments].sort((a, b) => b.count - a.count);
+  const environmentTagCount = segments.reduce((sum, segment) => sum + segment.count, 0);
+  const topSegment = legendSegments[0];
+
+  return (
+    <div className="flex min-w-[172px] items-center gap-3">
+      <div
+        className="relative grid size-[74px] shrink-0 place-items-center rounded-full border border-white shadow-[0_5px_18px_rgba(28,25,22,0.12)]"
+        style={{ background: donutGradientFromSegments(segments) }}
+        aria-label={`${displayNameFor(user.userId)} environment sound mix`}
+      >
+        <div className="grid size-[42px] place-items-center rounded-full border border-[rgba(28,25,22,0.08)] bg-[rgba(255,255,255,0.88)] backdrop-blur-sm">
+          <span className="text-[13px] font-semibold tabular-nums text-[var(--ink)]">
+            {environmentTagCount}
+          </span>
+        </div>
+      </div>
+
+      <div className="min-w-0 space-y-1">
+        {legendSegments.length ? (
+          legendSegments.slice(0, 3).map((segment) => (
+            <div key={segment.cls} className="flex items-center gap-2 text-[11px] font-semibold text-[var(--ink-soft)]">
+              <span
+                className="size-2.5 shrink-0 rounded-full"
+                style={{ background: AUDIO_CONFIG[segment.cls].color }}
+              />
+              <span className="min-w-[42px] text-[var(--ink-muted)]">{AUDIO_CONFIG[segment.cls].short}</span>
+              <span className="tabular-nums">{Math.round(segment.share * 100)}%</span>
+            </div>
+          ))
+        ) : (
+          <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--ink-soft)]">
+            no ambient
+          </div>
+        )}
+        {topSegment ? (
+          <div className="truncate text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--ink-soft)]">
+            {AUDIO_CONFIG[topSegment.cls].label}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 function UserRow({ user }: { user: UserBucket }) {
   const shotCount = user.days.reduce((sum, d) => sum + d.candies.filter((c) => c.screenshotUrl).length, 0);
 
   return (
-    <div className="grid min-h-0 grid-cols-[280px_1fr] border-t border-[var(--rule)]">
-      <div className="flex items-center gap-4 bg-[rgba(255,255,255,0.48)] px-7">
-        <div className="grid size-[58px] shrink-0 place-items-center rounded-full border border-[var(--line)] bg-white">
-          <span className="font-display text-[20px] text-[var(--ink)]">{initialsFor(user.userId)}</span>
+    <div className="grid min-h-0 grid-cols-[420px_1fr] border-t border-[var(--rule)]">
+      <div className="grid grid-cols-[1fr_auto] items-center gap-5 bg-[rgba(255,255,255,0.48)] px-6">
+        <div className="flex min-w-0 items-center gap-4">
+          <div className="grid size-[58px] shrink-0 place-items-center rounded-full border border-[var(--line)] bg-white">
+            <span className="font-display text-[20px] text-[var(--ink)]">{initialsFor(user.userId)}</span>
+          </div>
+          <div className="min-w-0">
+            <h2 className="truncate text-[28px] font-semibold tracking-normal text-[var(--ink)]">
+              {displayNameFor(user.userId)}
+            </h2>
+            <p className="mt-1 text-[12px] font-semibold uppercase tracking-[0.12em] text-[var(--ink-soft)]">
+              {user.total} candies · {shotCount} shots
+            </p>
+          </div>
         </div>
-        <div className="min-w-0">
-          <h2 className="truncate text-[28px] font-semibold tracking-normal text-[var(--ink)]">
-            {displayNameFor(user.userId)}
-          </h2>
-          <p className="mt-1 text-[12px] font-semibold uppercase tracking-[0.12em] text-[var(--ink-soft)]">
-            {user.total} candies · {shotCount} shots
-          </p>
-        </div>
+
+        <EnvironmentDonut user={user} />
       </div>
 
       <div className="min-h-0 border-l border-[var(--rule-soft)] px-5 py-3">
@@ -541,9 +644,20 @@ export default async function DataOverviewPage() {
         >
           <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(28,25,22,0.024)_1px,transparent_1px),linear-gradient(rgba(28,25,22,0.02)_1px,transparent_1px)] bg-[size:96px_96px]" />
           <div className="relative grid h-full grid-rows-[62px_1fr] p-0">
-            <div className="grid grid-cols-[280px_1fr] border-b border-[var(--rule)] bg-[rgba(255,255,255,0.54)]">
-              <div className="flex items-center px-7 text-[12px] font-semibold uppercase tracking-[0.18em] text-[var(--ink-soft)]">
-                user name
+            <div className="grid grid-cols-[420px_1fr] border-b border-[var(--rule)] bg-[rgba(255,255,255,0.54)]">
+              <div className="flex items-center justify-between gap-5 px-6 text-[12px] font-semibold uppercase tracking-[0.18em] text-[var(--ink-soft)]">
+                <span>user name</span>
+                <div className="flex items-center gap-2 tracking-normal">
+                  {ENVIRONMENT_CLASSES.map((cls) => (
+                    <span key={cls} className="flex items-center gap-1.5 text-[10px] font-semibold text-[var(--ink-soft)]">
+                      <span
+                        className="size-2 rounded-full"
+                        style={{ background: AUDIO_CONFIG[cls].color }}
+                      />
+                      {AUDIO_CONFIG[cls].short}
+                    </span>
+                  ))}
+                </div>
               </div>
               <div className="grid grid-cols-5">
                 {DATE_COLUMNS.map((dateStr) => (
